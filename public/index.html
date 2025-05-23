@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BarshaTalk</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        background-color: #0a0a0a;
+        color: #ffffff;
+        overflow: hidden;
+      }
+
+      /* Fade In Animation */
+      .fade-in {
+        opacity: 0;
+        transform: scale(0.95);
+        animation: fadeInZoom 1s ease-out forwards;
+      }
+
+      .fade-in.delay-1 {
+        animation-delay: 0.4s;
+      }
+
+      .fade-in.delay-2 {
+        animation-delay: 0.8s;
+      }
+
+      @keyframes fadeInZoom {
+        to {
+          opacity: 1;
+          transform: scale(1);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Background Video -->
+    <video
+      autoplay
+      muted
+      loop
+      id="bgVideo"
+      style="
+        position: fixed;
+        right: 0;
+        bottom: 0;
+        min-width: 100%;
+        min-height: 100%;
+        object-fit: cover;
+        z-index: -1;
+      "
+    >
+      <source
+        src="https://cdn.glitch.global/498eeaf2-e9b7-4a5d-bb55-137a5bc68843/8688681-hd_1920_1080_25fps.mp4?v=1746920711781"
+        type="video/mp4"
+      />
+      Your browser does not support the video tag.
+    </video>
+
+    <!-- Welcome Screen -->
+    <div
+      id="welcomeScreen"
+      class="active"
+      style="
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        background-color: rgba(0, 0, 0, 0.6);
+        padding: 20px;
+        text-align: center;
+      "
+    >
+      <h1
+        class="fade-in"
+        style="font-size: 2.5em; color: #00ffff; text-shadow: 0 0 10px #00ffff"
+      >
+        👾 BarshaTalk
+      </h1>
+      <p class="fade-in delay-1" style="font-size: 1.1em; color: #ccc">
+        Meet strangers worldwide
+      </p>
+      <div
+        class="fade-in delay-2"
+        style="
+          margin-top: 30px;
+          display: flex;
+          flex-direction: column;
+          gap: 15px;
+          width: 100%;
+          max-width: 300px;
+        "
+      >
+        <button
+          onclick="location.href='text.html'"
+          style="
+            padding: 12px 25px;
+            font-size: 1em;
+            border: none;
+            border-radius: 5px;
+            background: #00ffff;
+            color: #000;
+            box-shadow: 0 0 10px #00ffff;
+            cursor: pointer;
+          "
+        >
+          💬 Text Chat
+        </button>
+
+        <button
+          onclick="location.href='video.html'"
+          style="
+            padding: 12px 25px;
+            font-size: 1em;
+            border: none;
+            border-radius: 5px;
+            background: #ff00ff;
+            color: #000;
+            box-shadow: 0 0 10px #ff00ff;
+            cursor: pointer;
+          "
+        >
+          🎥 Video Chat
+        </button>
+      </div>
+    </div>
+  </body>
+</html>
