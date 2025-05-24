@@ -284,7 +284,8 @@ const config = {
 function initializeWebRTC() {
   remoteStream = new MediaStream();
   remoteVideo.srcObject = remoteStream;
-  socket = io("https://barshatalk-video.glitch.me", { withCredentials: true, transports: ['websocket', 'polling'] });
+  socket = io("
+https://barshatalk-video-server-1.onrender.com", { withCredentials: true, transports: ['websocket', 'polling'] });
 
   remoteVideo.style.display = "none";
   remoteCameraOffEmoji.style.display = "block";
