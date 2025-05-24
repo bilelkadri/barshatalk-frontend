@@ -1,32 +1,87 @@
+/* Reset and basic layout */
 body {
+  margin: 0;
   font-family: Arial, sans-serif;
-  background: #f4f4f4;
+  background-color: #f5f5f5;
   display: flex;
-  justify-content: center;
-  padding: 40px;
+  flex-direction: column;
+  height: 100vh;
 }
 
-.container {
-  background: white;
-  border-radius: 10px;
-  padding: 20px;
-  width: 100%;
-  max-width: 600px;
-  box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+#chat {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
 }
 
-#chat-box {
-  height: 300px;
+#messages {
+  flex: 1;
   overflow-y: auto;
-  border: 1px solid #ddd;
   padding: 10px;
-  margin-bottom: 10px;
-  background: #fafafa;
+  display: flex;
+  flex-direction: column;
+  background-color: #e5ddd5;
 }
 
-input,
-button {
-  padding: 10px;
-  font-size: 16px;
-  margin-right: 5px;
+/* Message bubbles */
+.message-you,
+.message-stranger {
+  max-width: 75%;
+  padding: 10px 15px;
+  border-radius: 15px;
+  margin: 8px;
+  font-size: 15px;
+  line-height: 1.4;
+  word-wrap: break-word;
+  word-break: break-word;
 }
+
+.message-you {
+  background-color: #00ffff;
+  color: #000;
+  align-self: flex-end;
+  text-align: right;
+  margin-left: auto;
+}
+
+.message-stranger {
+  background-color: #ffffff;
+  color: #000;
+  align-self: flex-start;
+  text-align: left;
+  margin-right: auto;
+}
+
+/* Input form */
+#messageForm {
+  display: flex;
+  padding: 10px;
+  background-color: #fff;
+  border-top: 1px solid #ddd;
+}
+
+#messageInput {
+  flex: 1;
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 20px;
+  font-size: 14px;
+  outline: none;
+  margin-right: 10px;
+}
+
+#messageForm button {
+  background-color: #00bcd4;
+  color: white;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 20px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+#messageForm button:hover {
+  background-color: #0097a7;
+}
+
