@@ -8,10 +8,7 @@
       type="module"
       src="https://cdn.jsdelivr.net/npm/emoji-picker-element@1/index.js"
     ></script>
-    <script
-      type="module"
-      src="https://cdn.socket.io/4.7.2/socket.io.esm.min.js"
-    ></script>
+    <!-- Note: Socket.IO library will be loaded at the end of the body -->
     <style>
       body {
         margin: 0;
@@ -207,117 +204,9 @@
       src="https://cdn.pixabay.com/audio/2022/03/21/audio_608e7cbbdb.mp3"
     ></audio>
 
-    <script type="module">
-      import { io } from "https://cdn.socket.io/4.7.2/socket.io.esm.min.js";
-
-      const socket = io();
-
-      const sendBtn = document.getElementById("sendBtn");
-      const nextBtn = document.getElementById("nextBtn");
-      const messageInput = document.getElementById("messageInput");
-      const messagesDiv = document.getElementById("messages");
-      const statusText = document.getElementById("statusText");
-      const sendSound = document.getElementById("sendSound");
-      const disconnectSound = document.getElementById("disconnectSound");
-      const emojiBtn = document.getElementById("emojiBtn");
-      const emojiPicker = document.getElementById("emojiPicker");
-
-      function appendMessage(text, isOwn = true) {
-        const msg = document.createElement("div");
-        msg.textContent = text;
-        msg.style.maxWidth = "70%";
-        msg.style.padding = "10px 15px";
-        msg.style.margin = "8px";
-        msg.style.borderRadius = "20px";
-        msg.style.backgroundColor = isOwn ? "#00ffff" : "#ff00ff";
-        msg.style.color = isOwn ? "#000" : "#fff";
-        msg.style.alignSelf = isOwn ? "flex-end" : "flex-start";
-        msg.style.boxShadow = "0 0 10px " + (isOwn ? "#00ffff" : "#ff00ff");
-        msg.style.fontSize = "0.95em";
-        msg.style.display = "inline-block";
-        msg.style.wordWrap = "break-word";
-        msg.style.textAlign = "left";
-
-        const wrapper = document.createElement("div");
-        wrapper.style.display = "flex";
-        wrapper.style.justifyContent = isOwn ? "flex-end" : "flex-start";
-        wrapper.appendChild(msg);
-        messagesDiv.appendChild(wrapper);
-        messagesDiv.scrollTop = messagesDiv.scrollHeight;
-      }
-
-      function appendSystemMessage(text) {
-        const msg = document.createElement("div");
-        msg.className = "system-message";
-        msg.textContent = text;
-        messagesDiv.appendChild(msg);
-        messagesDiv.scrollTop = messagesDiv.scrollHeight;
-      }
-
-      sendBtn.onclick = () => {
-        const msg = messageInput.value.trim();
-        if (msg) {
-          appendMessage(msg, true);
-          socket.emit("message", msg);
-          messageInput.value = "";
-          sendSound.play();
-        }
-      };
-
-      nextBtn.onclick = () => {
-        socket.emit("next");
-        statusText.textContent = "⌛ Searching for a new stranger...";
-        messagesDiv.innerHTML = "";
-      };
-
-      messageInput.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
-          sendBtn.click();
-        }
-      });
-
-      emojiBtn.addEventListener("click", () => {
-        emojiPicker.style.display =
-          emojiPicker.style.display === "none" ? "block" : "none";
-      });
-
-      emojiPicker.addEventListener("emoji-click", (event) => {
-        messageInput.value += event.detail.unicode;
-        emojiPicker.style.display = "none";
-        messageInput.focus();
-      });
-
-      document.addEventListener("click", (e) => {
-        if (!emojiPicker.contains(e.target) && e.target !== emojiBtn) {
-          emojiPicker.style.display = "none";
-        }
-      });
-
-      socket.on("waiting", () => {
-        statusText.textContent = "⌛ Waiting for a stranger...";
-      });
-
-      socket.on("matched", () => {
-        statusText.textContent = "💬 Connected to a Stranger";
-        statusText.classList.add("glitch");
-        appendSystemMessage("Chat started");
-        setTimeout(() => statusText.classList.remove("glitch"), 500);
-      });
-
-      socket.on("partnerDisconnected", () => {
-        statusText.textContent = "❌ Stranger disconnected";
-        statusText.classList.add("glitch");
-        appendSystemMessage("Partner disconnected");
-        disconnectSound.play();
-        setTimeout(() => {
-          statusText.textContent = "⌛ Waiting for a stranger...";
-          statusText.classList.remove("glitch");
-        }, 1500);
-      });
-
-      socket.on("message", (msg) => {
-        appendMessage(msg, false);
-      });
-    </script>
+    <!-- Load Socket.IO library first -->
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <!-- Then load your custom script that uses Socket.IO -->
+    <script src="script.js" defer></script>
   </body>
 </html>
