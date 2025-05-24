@@ -1,19 +1,11 @@
 const socket = io("https://barshatalk-text-server.onrender.com");
 
-let localStream;
-let remoteStream;
-let peerConnection;
-let chatMode = null;
-
-const config = {
-  iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
-};
-
 // UI elements
 const welcomeScreen = document.getElementById("welcomeScreen");
 const chatScreen = document.getElementById("chatScreen");
-const localVideo = document.getElementById("localVideo");
-const remoteVideo = document.getElementById("remoteVideo");
+// Remove video elements references if they are not used for text chat UI
+// const localVideo = document.getElementById("localVideo");
+// const remoteVideo = document.getElementById("remoteVideo");
 const sendBtn = document.getElementById("sendBtn");
 const disconnectBtn = document.getElementById("disconnectBtn");
 const messageInput = document.getElementById("messageInput");
@@ -23,34 +15,43 @@ const messages = document.getElementById("messages");
 const messageSound = new Audio("https://cdn.glitch.global/498eeaf2-e9b7-4a5d-bb55-137a5bc68843/notification-5-337824.mp3?v=1746932737989");
 
 // Handle UI
+// This function might need adjustment depending on how text/video modes are selected in index.html
 function startChat(mode) {
-  chatMode = mode;
-  welcomeScreen.classList.remove("active");
-  chatScreen.classList.add("active");
-  socket.connect();
+  // Assuming this script is only for text chat page (text.html)
+  // If it's loaded on video.html too, this needs more logic
+  if (mode === "text") {
+      welcomeScreen.classList.remove("active");
+      chatScreen.classList.add("active");
+      // socket.connect(); // io() usually connects automatically
+      console.log("Attempting to connect to text chat server...");
+  }
 }
 
-// Socket setup
+// Socket setup for TEXT CHAT ONLY
 socket.on("connect", () => {
-  console.log("Connected to server");
+  console.log("Connected to text chat server");
+  // Maybe emit a 'ready' event for text chat here if the server expects it
 });
 
-socket.on("partner-found", async () => {
-  appendMessage("🎉 Partner found!");
-  if (chatMode === "video") {
-    await startVideoChat();
-  }
+socket.on("connect_error", (error) => {
+    console.error("Text chat Socket.IO connection error:", error);
+    appendMessage("⚠️ Connection error to text chat server.");
+});
+
+socket.on("partner-found", () => {
+  appendMessage("🎉 Partner found for text chat!");
+  // No video logic here
 });
 
 socket.on("waiting", () => {
-  appendMessage("⏳ Waiting for a partner...");
+  appendMessage("⏳ Waiting for a text chat partner...");
 });
 
 sendBtn.onclick = () => {
   const msg = messageInput.value;
   if (msg.trim()) {
     appendMessage("You: " + msg);
-    socket.emit("message", msg);
+    socket.emit("message", msg); // Ensure server expects 'message' event
     messageInput.value = "";
     messageSound.play(); // Play sound when message is sent
   }
@@ -58,6 +59,7 @@ sendBtn.onclick = () => {
 
 disconnectBtn.onclick = () => {
   socket.disconnect();
+  // Consider redirecting or just showing welcome screen instead of reload
   window.location.reload();
 };
 
@@ -65,25 +67,7 @@ socket.on("message", (msg) => {
   appendMessage("Stranger: " + msg);
 });
 
-// WebRTC signaling
-socket.on("offer", async (offer) => {
-  if (!peerConnection) await createPeerConnection();
-
-  await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
-  const answer = await peerConnection.createAnswer();
-  await peerConnection.setLocalDescription(answer);
-  socket.emit("answer", answer);
-});
-
-socket.on("answer", async (answer) => {
-  await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
-});
-
-socket.on("ice-candidate", (candidate) => {
-  if (peerConnection) {
-    peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
-  }
-});
+// Removed WebRTC signaling listeners (offer, answer, ice-candidate)
 
 // Message box
 function appendMessage(msg) {
@@ -91,38 +75,9 @@ function appendMessage(msg) {
   messages.scrollTop = messages.scrollHeight;
 }
 
-// Start Video Chat
-async function startVideoChat() {
-  await createPeerConnection();
+// Removed video functions (startVideoChat, createPeerConnection)
 
-  localStream = await navigator.mediaDevices.getUserMedia({
-    video: true,
-    audio: true,
-  });
-  localStream
-    .getTracks()
-    .forEach((track) => peerConnection.addTrack(track, localStream));
-  localVideo.srcObject = localStream;
+// If startChat is called from HTML, ensure it's called with 'text' mode
+// e.g., <button onclick="startChat('text')">Start Text Chat</button>
 
-  remoteStream = new MediaStream();
-  remoteVideo.srcObject = remoteStream;
 
-  const offer = await peerConnection.createOffer();
-  await peerConnection.setLocalDescription(offer);
-  socket.emit("offer", offer);
-}
-
-// Create Peer Connection
-async function createPeerConnection() {
-  peerConnection = new RTCPeerConnection(config);
-
-  peerConnection.onicecandidate = (event) => {
-    if (event.candidate) {
-      socket.emit("ice-candidate", event.candidate);
-    }
-  };
-
-  peerConnection.ontrack = (event) => {
-    remoteStream.addTrack(event.track);
-  };
-}
