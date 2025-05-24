@@ -27,7 +27,7 @@ let isWaitingForMatch = false;
 let socketId = null;
 let partnerId = null;
 let isInitiator = false;
-let socket;
+let socket; // This socket variable is specific to video.js
 let peerConnection = null;
 let remoteStream = null;
 let iceCandidateQueue = [];
@@ -37,58 +37,59 @@ let userProfile = {
   gender: ""
 };
 
-// Make variables available to inline scripts
-window.isConnected = isConnected;
-window.socket = socket;
-window.partnerId = partnerId;
-window.userProfile = userProfile;
+// Make variables available to inline scripts if needed, but be careful with naming conflicts
+// Consider renaming if script.js is also loaded on the same page
+window.isVideoConnected = isConnected; // Renamed to avoid conflict
+window.videoSocket = socket; // Renamed to avoid conflict
+window.videoPartnerId = partnerId; // Renamed to avoid conflict
+window.userProfile = userProfile; // Shared profile might be okay
 
-// Initialize user profile modal
+// Initialize user profile modal (This seems specific to video chat start)
 function initializeUserProfileModal() {
   // Set default nickname (random adjective + animal + number)
   generateRandomNickname();
-  
+
   // Set default date (18 years ago)
   const today = new Date();
   const defaultDate = new Date(today.getFullYear() - 18, today.getMonth(), today.getDate());
   birthdayInput.value = defaultDate.toISOString().split('T')[0];
-  
+
   // Add event listener for gender selection
   let selectedGender = null;
-  
+
   genderButtons.forEach(button => {
     button.addEventListener('click', function() {
       // Remove active class from all buttons
       genderButtons.forEach(btn => btn.classList.remove('active'));
-      
+
       // Add active class to clicked button
       this.classList.add('active');
-      
+
       // Store selected gender
       selectedGender = this.getAttribute('data-value');
       userProfile.gender = selectedGender;
     });
   });
-  
+
   // Add event listener for nickname generator
   generateNicknameBtn.addEventListener('click', generateRandomNickname);
-  
+
   // Add event listener for start chat button
   startChatBtn.addEventListener("click", function() {
     if (validateUserProfile()) {
       saveUserProfile();
       userInfoModal.classList.remove('active');
       videoContainer.style.display = "flex";
-      initializeCamera();
+      initializeCamera(); // Start camera and WebRTC after profile setup
     }
   });
-  
+
   // Initialize mobile swipe gestures
   initMobileGestures();
-  
+
   // Initialize heart button
   initHeartButton();
-  
+
   // Ensure nicknames are hidden initially
   if (localNicknameDisplay) {
     localNicknameDisplay.style.display = "none";
@@ -96,6 +97,8 @@ function initializeUserProfileModal() {
   if (remoteNicknameDisplay) {
     remoteNicknameDisplay.style.display = "none";
   }
+  // Show the modal initially if it's hidden by default
+  userInfoModal.classList.add('active');
 }
 
 // Generate random nickname
@@ -104,7 +107,7 @@ function generateRandomNickname() {
   const animals = ["Lizard", "Tiger", "Panda", "Shark", "Eagle", "Wolf", "Fox", "Dragon", "Unicorn", "Phoenix"];
   const randomNum = Math.floor(Math.random() * 100);
   const randomNickname = `${adjectives[Math.floor(Math.random() * adjectives.length)]}${animals[Math.floor(Math.random() * animals.length)]}${randomNum}`;
-  
+
   nicknameInput.value = randomNickname;
 }
 
@@ -114,17 +117,17 @@ function validateUserProfile() {
     alert("Please enter a nickname");
     return false;
   }
-  
+
   if (!birthdayInput.value) {
     alert("Please enter your birthday");
     return false;
   }
-  
+
   if (!userProfile.gender) {
     alert("Please select your gender");
     return false;
   }
-  
+
   return true;
 }
 
@@ -132,10 +135,10 @@ function validateUserProfile() {
 function saveUserProfile() {
   userProfile.nickname = nicknameInput.value.trim();
   userProfile.birthday = birthdayInput.value;
-  
+
   // Update global userProfile for inline scripts
   window.userProfile = userProfile;
-  
+
   // Don't display nickname yet - wait until camera is initialized
 }
 
@@ -145,7 +148,7 @@ function initMobileGestures() {
   let touchEndX = 0;
   let touchStartY = 0;
   let touchEndY = 0;
-  
+
   // Add touch event listeners to both video containers
   [remoteVideoContainer, localVideoContainer].forEach(container => {
     if (container) {
@@ -153,7 +156,7 @@ function initMobileGestures() {
         touchStartX = e.changedTouches[0].screenX;
         touchStartY = e.changedTouches[0].screenY;
       });
-      
+
       container.addEventListener('touchend', function(e) {
         touchEndX = e.changedTouches[0].screenX;
         touchEndY = e.changedTouches[0].screenY;
@@ -161,18 +164,18 @@ function initMobileGestures() {
       });
     }
   });
-  
+
   function handleSwipe(container) {
     // Up swipe (threshold of 50px) for next
     if (touchStartY - touchEndY > 50) {
       // Add swipe up animation effect
       container.classList.add('swipe-up-transition');
-      
+
       // Remove the class after animation completes
       setTimeout(() => {
         container.classList.remove('swipe-up-transition');
       }, 500);
-      
+
       // Trigger next button
       document.getElementById('nextBtn').click();
     }
@@ -193,29 +196,29 @@ function showHeartAnimation() {
   // Create multiple colorful hearts
   const colors = ['heart-pink', 'heart-red', 'heart-purple', 'heart-blue'];
   const heartCount = 3 + Math.floor(Math.random() * 3); // 3-5 hearts
-  
+
   for (let i = 0; i < heartCount; i++) {
     setTimeout(() => {
       const heartElement = document.createElement('div');
       heartElement.textContent = '❤️';
       heartElement.classList.add('animated-heart');
-      
+
       // Add random color class
       const colorClass = colors[Math.floor(Math.random() * colors.length)];
       heartElement.classList.add(colorClass);
-      
+
       // Position the heart at a random horizontal position
       const randomX = Math.random() * 80 + 10; // 10% to 90% of container width
       heartElement.style.left = `${randomX}%`;
       heartElement.style.bottom = '20px';
-      
+
       // Add random size variation
       const randomSize = 0.8 + Math.random() * 0.4; // 0.8-1.2
       heartElement.style.fontSize = `${50 * randomSize}px`;
-      
+
       // Add to remote container only
       remoteVideoContainer.appendChild(heartElement);
-      
+
       // Remove after animation completes
       setTimeout(() => {
         if (remoteVideoContainer.contains(heartElement)) {
@@ -224,7 +227,7 @@ function showHeartAnimation() {
       }, 2000);
     }, i * 150); // Stagger the hearts
   }
-  
+
   // If connected to a peer, send heart data
   if (isConnected && socket) {
     socket.emit("reaction", { 
@@ -232,11 +235,11 @@ function showHeartAnimation() {
       to: partnerId,
       nickname: userProfile.nickname
     });
-    
+
     // Update global variables for inline scripts
-    window.isConnected = isConnected;
-    window.socket = socket;
-    window.partnerId = partnerId;
+    window.isVideoConnected = isConnected;
+    window.videoSocket = socket;
+    window.videoPartnerId = partnerId;
   }
 }
 
@@ -246,17 +249,18 @@ async function initializeCamera() {
     console.log("Camera access granted:", localStream.getTracks().map(t => t.kind));
     localVideo.srcObject = localStream;
     updateCameraStatus();
-    
+
     // Now that camera is initialized, show local nickname
     if (localNicknameDisplay) {
       localNicknameDisplay.textContent = userProfile.nickname;
       localNicknameDisplay.style.display = "block";
     }
-    
-    initializeWebRTC();
+
+    initializeWebRTC(); // Initialize WebRTC connection AFTER getting camera stream
     return true;
   } catch (err) {
     console.error("Camera access error:", err);
+    setStatus("⚠️ Camera access denied or failed.");
     updateCameraStatus(false);
     return false;
   }
@@ -284,13 +288,14 @@ const config = {
 function initializeWebRTC() {
   remoteStream = new MediaStream();
   remoteVideo.srcObject = remoteStream;
-  socket = io("
-https://barshatalk-video-server-1.onrender.com", { withCredentials: true, transports: ['websocket', 'polling'] });
+  // *** CORRECTED URL HERE - REMOVED LEADING \n ***
+  socket = io("https://barshatalk-video-server-1.onrender.com", { withCredentials: true, transports: ['websocket', 'polling'] });
 
   remoteVideo.style.display = "none";
   remoteCameraOffEmoji.style.display = "block";
   loadingCircle.style.display = "block";
-  
+  setStatus("⌛ Connecting to video server...");
+
   // Ensure remote nickname is hidden until connected
   if (remoteNicknameDisplay) {
     remoteNicknameDisplay.style.display = "none";
@@ -298,6 +303,8 @@ https://barshatalk-video-server-1.onrender.com", { withCredentials: true, transp
 
   socket.on("connect", () => {
     socketId = socket.id;
+    console.log("Connected to video server with ID:", socketId);
+    setStatus("⌛ Waiting for a stranger...");
     if (!isWaitingForMatch) {
       isWaitingForMatch = true;
       // Send user profile data with ready signal
@@ -306,18 +313,20 @@ https://barshatalk-video-server-1.onrender.com", { withCredentials: true, transp
         gender: userProfile.gender
       });
     }
-    
+
     // Update global variables for inline scripts
-    window.socket = socket;
+    window.videoSocket = socket;
   });
 
   socket.on("connect_error", (error) => {
-    console.error("Socket.IO connection error:", error);
-    setStatus("⚠️ Connection error");
+    console.error("Video Socket.IO connection error:", error);
+    setStatus("⚠️ Connection error to video server.");
   });
 
   socket.on("matched", async (data) => {
+    console.log("Matched event received:", data);
     if (data && data.partnerId === socketId) {
+      console.log("Matched with self? Requesting next.");
       socket.emit("next");
       return;
     }
@@ -325,91 +334,124 @@ https://barshatalk-video-server-1.onrender.com", { withCredentials: true, transp
     isConnected = true;
     isWaitingForMatch = false;
     isInitiator = data.initiator;
-    setStatus("Connected to a partner");
+    setStatus("✅ Connected to a partner");
     remoteVideoContainer.classList.add("glow");
-    
+    loadingCircle.style.display = "none"; // Hide loading circle
+
     // Display partner nickname if available
     if (data.partnerNickname && remoteNicknameDisplay) {
       remoteNicknameDisplay.textContent = data.partnerNickname;
       remoteNicknameDisplay.style.display = "block";
       console.log("Partner nickname set:", data.partnerNickname);
     } else {
-      console.log("No partner nickname received in matched event");
+      console.log("No partner nickname received in matched event, requesting...");
       // Request partner info explicitly
       if (socket && partnerId) {
         socket.emit("getPartnerInfo", { partnerId: partnerId });
       }
     }
-    
+
     // Update global variables for inline scripts
-    window.isConnected = isConnected;
-    window.partnerId = partnerId;
-    
+    window.isVideoConnected = isConnected;
+    window.videoPartnerId = partnerId;
+
     createPeerConnection();
 
     if (isInitiator) {
+      console.log("I am the initiator, creating offer...");
       try {
         const offer = await peerConnection.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true });
         await peerConnection.setLocalDescription(offer);
-        setTimeout(() => socket.emit("offer", peerConnection.localDescription), 1000);
+        // Add a slight delay before sending offer
+        setTimeout(() => socket.emit("offer", { offer: peerConnection.localDescription, to: partnerId }), 500);
+        console.log("Offer sent to", partnerId);
       } catch (err) {
         console.error("Offer creation error:", err);
       }
     }
   });
 
-  socket.on("offer", async (offer) => {
+  socket.on("offer", async (data) => {
+    console.log("Offer received:", data);
     if (!isConnected) {
-      isConnected = true;
-      isWaitingForMatch = false;
-      isInitiator = false;
-      setStatus("Connected to a partner");
-      remoteVideoContainer.classList.add("glow");
-      createPeerConnection();
-      
-      // Update global variables for inline scripts
-      window.isConnected = isConnected;
+        console.log("Received offer but not connected yet, setting up...");
+        partnerId = data.from; // Assuming 'from' contains the partner's socket ID
+        isConnected = true;
+        isWaitingForMatch = false;
+        isInitiator = false;
+        setStatus("✅ Connected to a partner");
+        remoteVideoContainer.classList.add("glow");
+        loadingCircle.style.display = "none"; // Hide loading circle
+        createPeerConnection();
+
+        // Update global variables for inline scripts
+        window.isVideoConnected = isConnected;
+        window.videoPartnerId = partnerId;
     }
 
     try {
-      await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
-      iceCandidateQueue.forEach(async (c) => {
-        try {
-          await peerConnection.addIceCandidate(new RTCIceCandidate(c));
-        } catch (err) {
-          console.warn("❗ ICE retry failed:", err);
-        }
-      });
-      iceCandidateQueue = [];
+      await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
+      console.log("Remote description (offer) set.");
+      // Process queued candidates immediately after setting remote description
+      console.log(`Processing ${iceCandidateQueue.length} queued ICE candidates...`);
+      while (iceCandidateQueue.length > 0) {
+          const candidate = iceCandidateQueue.shift();
+          try {
+              await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+              console.log("Queued ICE candidate added.");
+          } catch (err) {
+              console.warn("❗ Adding queued ICE candidate failed:", err);
+          }
+      }
+      console.log("Creating answer...");
       const answer = await peerConnection.createAnswer();
       await peerConnection.setLocalDescription(answer);
-      setTimeout(() => socket.emit("answer", peerConnection.localDescription), 1000);
+      console.log("Local description (answer) set.");
+      // Add a slight delay before sending answer
+      setTimeout(() => socket.emit("answer", { answer: peerConnection.localDescription, to: partnerId }), 500);
+      console.log("Answer sent to", partnerId);
     } catch (err) {
-      console.error("Answer creation error:", err);
+      console.error("Answer creation/setting error:", err);
     }
   });
 
-  socket.on("answer", async (answer) => {
+  socket.on("answer", async (data) => {
+    console.log("Answer received:", data);
     if (peerConnection && isInitiator) {
-      await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
-      iceCandidateQueue.forEach(async (c) => {
-        try {
-          await peerConnection.addIceCandidate(new RTCIceCandidate(c));
-        } catch (err) {
-          console.warn("❗ ICE retry on answer failed:", err);
-        }
-      });
-      iceCandidateQueue = [];
+      try {
+          await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+          console.log("Remote description (answer) set.");
+          // Process queued candidates immediately after setting remote description
+          console.log(`Processing ${iceCandidateQueue.length} queued ICE candidates...`);
+          while (iceCandidateQueue.length > 0) {
+              const candidate = iceCandidateQueue.shift();
+              try {
+                  await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+                  console.log("Queued ICE candidate added.");
+              } catch (err) {
+                  console.warn("❗ Adding queued ICE candidate on answer failed:", err);
+              }
+          }
+      } catch (err) {
+          console.error("Error setting remote description (answer):", err);
+      }
     }
   });
 
-  socket.on("candidate", async (candidate) => {
-    if (peerConnection && candidate) {
-      if (!peerConnection.remoteDescription || !peerConnection.remoteDescription.type) {
-        console.log("🕒 Queuing ICE candidate");
-        iceCandidateQueue.push(candidate);
-      } else {
-        await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+  socket.on("candidate", async (data) => {
+    console.log("ICE Candidate received:", data);
+    if (peerConnection && data.candidate) {
+      try {
+          // Queue candidate if remote description is not yet set
+          if (!peerConnection.remoteDescription || !peerConnection.remoteDescription.type) {
+              console.log("🕒 Queuing ICE candidate (remote description not set)");
+              iceCandidateQueue.push(data.candidate);
+          } else {
+              await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+              console.log("ICE candidate added.");
+          }
+      } catch (err) {
+          console.warn("❗ Error adding received ICE candidate:", err);
       }
     }
   });
@@ -421,7 +463,7 @@ https://barshatalk-video-server-1.onrender.com", { withCredentials: true, transp
       showHeartAnimation();
     }
   });
-  
+
   // Handle partner nickname update
   socket.on("partnerInfo", (data) => {
     if (data && data.nickname && remoteNicknameDisplay) {
@@ -434,6 +476,7 @@ https://barshatalk-video-server-1.onrender.com", { withCredentials: true, transp
   socket.on("partnerDisconnected", () => disconnectPartner());
 
   socket.on("waiting", () => {
+    console.log("Waiting event received from server.");
     isConnected = false;
     isWaitingForMatch = true;
     isInitiator = false;
@@ -442,206 +485,194 @@ https://barshatalk-video-server-1.onrender.com", { withCredentials: true, transp
     remoteVideo.style.display = "none";
     remoteCameraOffEmoji.style.display = "block";
     loadingCircle.style.display = "block";
-    
+
     // Hide remote nickname while waiting
     if (remoteNicknameDisplay) {
       remoteNicknameDisplay.style.display = "none";
       remoteNicknameDisplay.textContent = "";
     }
-    
+
+    // Clean up peer connection if exists
+    if (peerConnection) {
+        peerConnection.close();
+        peerConnection = null;
+    }
+    if (remoteStream) {
+        remoteStream.getTracks().forEach(track => track.stop());
+        remoteStream = null;
+        remoteVideo.srcObject = null;
+    }
+    iceCandidateQueue = []; // Clear queue
+
     // Update global variables for inline scripts
-    window.isConnected = isConnected;
-    window.partnerId = null;
+    window.isVideoConnected = isConnected;
+    window.videoPartnerId = null;
   });
 
   document.getElementById("nextBtn").onclick = () => {
-    socket.emit("next");
+    console.log("Next button clicked.");
+    if (socket) socket.emit("next");
     disconnectPartner();
   };
+
+  // Add button listeners if they exist
+  if (muteBtn) {
+      muteBtn.onclick = () => {
+          if (localStream) {
+              const audioTrack = localStream.getAudioTracks()[0];
+              if (audioTrack) {
+                  audioTrack.enabled = !audioTrack.enabled;
+                  muteBtn.textContent = audioTrack.enabled ? "Mute" : "Unmute";
+              }
+          }
+      };
+  }
+
+  if (toggleCameraBtn) {
+      toggleCameraBtn.onclick = () => {
+          if (localStream) {
+              const videoTrack = localStream.getVideoTracks()[0];
+              if (videoTrack) {
+                  videoTrack.enabled = !videoTrack.enabled;
+                  updateCameraStatus(); // Update UI based on new state
+              }
+          }
+      };
+  }
 }
 
 function createPeerConnection() {
-  if (peerConnection) peerConnection.close();
-  if (remoteStream) remoteStream.getTracks().forEach(t => t.stop());
+  console.log("Creating Peer Connection...");
+  if (peerConnection) {
+      console.log("Closing existing Peer Connection.");
+      peerConnection.close();
+  }
+  if (remoteStream) {
+      remoteStream.getTracks().forEach(t => t.stop());
+  }
 
   remoteStream = new MediaStream();
   remoteVideo.srcObject = remoteStream;
   peerConnection = new RTCPeerConnection(config);
 
-  // ✅ Only add transceivers if we're the initiator
-  if (isInitiator) {
-    peerConnection.addTransceiver('video', { direction: 'sendrecv' });
-    peerConnection.addTransceiver('audio', { direction: 'sendrecv' });
-  }
-
-  // ✅ Add local tracks
+  // Add local tracks to the connection
   if (localStream) {
     localStream.getTracks().forEach(track => {
-      if (!peerConnection.getSenders().some(s => s.track === track)) {
-        peerConnection.addTrack(track, localStream);
-        console.log("✔️ Track added to peerConnection:", track.kind);
+      try {
+          if (!peerConnection.getSenders().some(s => s.track === track)) {
+              peerConnection.addTrack(track, localStream);
+              console.log("✔️ Track added to peerConnection:", track.kind);
+          }
+      } catch (err) {
+          console.error("Error adding track:", err);
       }
     });
   }
+
+  peerConnection.onicecandidate = event => {
+    if (event.candidate) {
+      console.log("ICE Candidate generated:", event.candidate);
+      // Send candidate to the partner via the signaling server
+      if (socket && partnerId) {
+          socket.emit("candidate", { candidate: event.candidate, to: partnerId });
+      }
+    }
+  };
 
   peerConnection.ontrack = event => {
     console.log("Remote track received:", event.track.kind, event.track.enabled);
     if (event.streams && event.streams[0]) {
       event.streams[0].getTracks().forEach(track => {
+        console.log("➡️ Adding track to remoteStream:", track.kind);
         remoteStream.addTrack(track);
-        console.log("➡️ Track added to remoteStream:", track.kind);
-        if (track.kind === "video") {
-          setTimeout(() => {
-            remoteVideo.style.display = "block";
-            remoteCameraOffEmoji.style.display = "none";
-            loadingCircle.style.display = "none";
-            
-            // Request partner info again when video track is received
-            if (socket && partnerId && (!remoteNicknameDisplay.textContent || remoteNicknameDisplay.style.display === "none")) {
-              socket.emit("getPartnerInfo", { partnerId: partnerId });
-              console.log("Requesting partner info after video track received");
-            }
-          }, 500);
-        }
       });
+      // Once tracks are received, show the remote video
+      remoteVideo.style.display = "block";
+      remoteCameraOffEmoji.style.display = "none";
+      loadingCircle.style.display = "none"; // Hide loading circle
+    } else {
+        // Handle cases where track is added directly to the stream
+        console.log("➡️ Adding track directly to remoteStream:", event.track.kind);
+        remoteStream.addTrack(event.track);
+        remoteVideo.style.display = "block";
+        remoteCameraOffEmoji.style.display = "none";
+        loadingCircle.style.display = "none"; // Hide loading circle
     }
   };
 
-  peerConnection.onicecandidate = event => {
-    if (event.candidate) socket.emit("candidate", event.candidate);
+  peerConnection.oniceconnectionstatechange = () => {
+      console.log("ICE Connection State Change:", peerConnection.iceConnectionState);
+      if (peerConnection.iceConnectionState === 'disconnected' || peerConnection.iceConnectionState === 'failed' || peerConnection.iceConnectionState === 'closed') {
+          console.log("Peer connection disconnected or failed.");
+          // Consider notifying the user or attempting to reconnect
+          // disconnectPartner(); // Optionally disconnect if state becomes failed/closed
+      }
   };
 
   peerConnection.onconnectionstatechange = () => {
-    console.log("WebRTC connection state:", peerConnection.connectionState);
-    if (peerConnection.connectionState === "connected") {
-      setTimeout(() => {
-        const videoTracks = remoteStream.getVideoTracks();
-        console.log("✅ Remote video tracks after connection:", videoTracks);
-        if (videoTracks.length === 0) {
-          console.log("🚨 No video tracks. Attempting renegotiation.");
-          if (isInitiator && peerConnection) {
-            peerConnection.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true })
-              .then(offer => peerConnection.setLocalDescription(offer))
-              .then(() => {
-                socket.emit("offer", peerConnection.localDescription);
-              })
-              .catch(err => console.error("Renegotiation error:", err));
-          }
-        } else {
-          remoteVideo.style.display = "block";
-          remoteCameraOffEmoji.style.display = "none";
-          loadingCircle.style.display = "none";
-          
-          // Make another attempt to get partner nickname if not already displayed
-          if (socket && partnerId && (!remoteNicknameDisplay.textContent || remoteNicknameDisplay.style.display === "none")) {
-            socket.emit("getPartnerInfo", { partnerId: partnerId });
-            console.log("Requesting partner info after connection established");
-          }
-        }
-      }, 1000);
-    } else if (["disconnected", "failed"].includes(peerConnection.connectionState)) {
-      disconnectPartner();
-    }
+      console.log("Connection State Change:", peerConnection.connectionState);
+      if (peerConnection.connectionState === 'connected') {
+          console.log("Peers connected!");
+          setStatus("✅ Connected");
+          loadingCircle.style.display = "none"; // Ensure loading circle is hidden
+      }
   };
 }
 
 function disconnectPartner() {
-  isConnected = false;
-  partnerId = null;
-  isInitiator = false;
-  setStatus("⌛ Waiting for a stranger...");
+  console.log("Disconnecting partner...");
+  if (isConnected) {
+    if (disconnectSound) disconnectSound.play();
+    isConnected = false;
+    isWaitingForMatch = true; // Go back to waiting state
+    isInitiator = false;
+    partnerId = null;
+    setStatus("Partner disconnected. Waiting...");
+    remoteVideoContainer.classList.remove("glow");
+    remoteVideo.style.display = "none";
+    remoteCameraOffEmoji.style.display = "block";
+    loadingCircle.style.display = "block";
 
-  if (disconnectSound) disconnectSound.play().catch(() => {});
-  remoteVideoContainer.classList.remove("glow");
-  if (remoteStream) remoteStream.getTracks().forEach(t => remoteStream.removeTrack(t));
+    // Hide remote nickname
+    if (remoteNicknameDisplay) {
+      remoteNicknameDisplay.style.display = "none";
+      remoteNicknameDisplay.textContent = "";
+    }
 
-  remoteVideo.style.display = "none";
-  remoteCameraOffEmoji.style.display = "block";
-  loadingCircle.style.display = "block";
-  
-  // Hide remote nickname on disconnect
-  if (remoteNicknameDisplay) {
-    remoteNicknameDisplay.style.display = "none";
-    remoteNicknameDisplay.textContent = "";
-  }
-  
-  // Update global variables for inline scripts
-  window.isConnected = false;
-  window.partnerId = null;
+    if (peerConnection) {
+      peerConnection.close();
+      peerConnection = null;
+    }
+    if (remoteStream) {
+      remoteStream.getTracks().forEach(track => track.stop());
+      remoteStream = null;
+      remoteVideo.srcObject = null;
+    }
+    iceCandidateQueue = []; // Clear queue
 
-  if (peerConnection) {
-    peerConnection.close();
-    peerConnection = null;
-  }
+    // Update global variables
+    window.isVideoConnected = isConnected;
+    window.videoPartnerId = partnerId;
 
-  remoteStream = new MediaStream();
-  remoteVideo.srcObject = remoteStream;
-
-  if (!isWaitingForMatch && socket && socket.connected) {
-    isWaitingForMatch = true;
-    socket.emit("ready", { 
-      nickname: userProfile.nickname,
-      gender: userProfile.gender
-    });
+    // Tell the server we are ready for a new match
+    if (socket) {
+        socket.emit("ready", { 
+            nickname: userProfile.nickname,
+            gender: userProfile.gender
+        });
+    }
   }
 }
 
 function setStatus(text) {
-  statusText.textContent = text;
-  statusText.classList.add("glitch");
-  setTimeout(() => statusText.classList.remove("glitch"), 500);
-}
-
-muteBtn.onclick = () => {
-  if (!localStream) return;
-  const audioTrack = localStream.getAudioTracks()[0];
-  if (!audioTrack) return;
-  audioTrack.enabled = !audioTrack.enabled;
-  muteBtn.textContent = audioTrack.enabled ? "Mute" : "Unmute";
-};
-
-toggleCameraBtn.onclick = () => {
-  if (!localStream) return;
-  const videoTrack = localStream.getVideoTracks()[0];
-  if (!videoTrack) return;
-  videoTrack.enabled = !videoTrack.enabled;
-  updateCameraStatus();
-};
-
-// Check if device is mobile
-function isMobileDevice() {
-  return (window.innerWidth <= 768) || 
-         (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent));
-}
-
-// Add device-specific classes
-function setupDeviceSpecificUI() {
-  const body = document.body;
-  if (isMobileDevice()) {
-    body.classList.add('mobile-device');
-    
-    // Make buttons more touch-friendly
-    const allButtons = document.querySelectorAll('button');
-    allButtons.forEach(btn => {
-      btn.classList.add('touch-friendly');
-    });
-  } else {
-    body.classList.add('desktop-device');
+  if (statusText) {
+    statusText.textContent = text;
   }
 }
 
-window.onload = () => {
-  // Setup device-specific UI
-  setupDeviceSpecificUI();
-  
-  // Initialize the user profile modal first
-  initializeUserProfileModal();
-  
-  // Hide video container until profile is completed
-  videoContainer.style.display = "none";
-  
-  // Handle window resize events for responsive adjustments
-  window.addEventListener('resize', function() {
-    setupDeviceSpecificUI();
-  });
-};
+// Initialize the user profile modal when the script loads
+// Ensure this runs only on the video page (video.html)
+if (document.getElementById('userInfoModal')) { // Check if the modal exists on the current page
+    initializeUserProfileModal();
+}
+
