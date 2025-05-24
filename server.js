@@ -1,7 +1,14 @@
 const express = require("express");
 const app = express();
 const http = require("http" ).createServer(app);
-const io = require("socket.io")(http );
+// Corrected Socket.IO initialization with CORS configuration
+const { Server } = require("socket.io");
+const io = new Server(http, {
+  cors: {
+    origin: "https://barshatalk-frontend.vercel.app", // ! Important: Replace with your Vercel app URL if different
+    methods: ["GET", "POST"]
+  }
+});
 const path = require("path");
 
 app.use(express.static("public")); // Serve static files from /public
@@ -26,9 +33,9 @@ function findPartner(socket) {
       waitingUsers.delete(partnerId);
       pairUsers(socket, partner);
     } else {
+      // Partner disconnected while waiting, remove them and try again
       waitingUsers.delete(partnerId);
-      waitingUsers.add(socket.id);
-      socket.emit("waiting");
+      findPartner(socket); // Recursively try to find another partner
     }
   } else {
     waitingUsers.add(socket.id);
@@ -43,6 +50,8 @@ function disconnectUser(socket) {
     if (partner && partner.connected) {
       partner.emit("partnerDisconnected");
       partners.delete(partner.id);
+      // Put the remaining partner back into the waiting pool
+      findPartner(partner);
     }
   }
   
@@ -53,10 +62,9 @@ function disconnectUser(socket) {
 io.on("connection", (socket) => {
   console.log("User connected:", socket.id);
   
-  // Événement pour le chat texte (existant)
+  // Find a partner for the new connection
   findPartner(socket);
   
-  // Événement pour le chat texte (existant)
   socket.on("message", (msg) => {
     const partnerId = partners.get(socket.id);
     if (partnerId) {
@@ -67,55 +75,22 @@ io.on("connection", (socket) => {
     }
   });
   
-  // Événement pour le chat vidéo (nouveau)
-  socket.on("ready", () => {
-    findPartner(socket);
-  });
+  // Note: Removed video chat related events ('ready', 'offer', 'answer', 'candidate') 
+  // as they should be handled by the dedicated video server.
   
-  // Événements WebRTC pour le chat vidéo (nouveaux)
-  socket.on("offer", (offer) => {
-    const partnerId = partners.get(socket.id);
-    if (partnerId) {
-      const partner = io.sockets.sockets.get(partnerId);
-      if (partner && partner.connected) {
-        partner.emit("offer", offer);
-      }
-    }
-  });
-  
-  socket.on("answer", (answer) => {
-    const partnerId = partners.get(socket.id);
-    if (partnerId) {
-      const partner = io.sockets.sockets.get(partnerId);
-      if (partner && partner.connected) {
-        partner.emit("answer", answer);
-      }
-    }
-  });
-  
-  socket.on("candidate", (candidate) => {
-    const partnerId = partners.get(socket.id);
-    if (partnerId) {
-      const partner = io.sockets.sockets.get(partnerId);
-      if (partner && partner.connected) {
-        partner.emit("candidate", candidate);
-      }
-    }
-  });
-  
-  // Événement pour passer au partenaire suivant (existant)
   socket.on("next", () => {
+    console.log("User requested next:", socket.id);
     disconnectUser(socket);
     findPartner(socket);
   });
   
-  // Événement de déconnexion (existant)
   socket.on("disconnect", () => {
     console.log("User disconnected:", socket.id);
     disconnectUser(socket);
   });
 });
 
+// Ensure the server listens on the port provided by Render
 const PORT = process.env.PORT || 3000;
 http.listen(PORT, ( ) => {
   console.log(`Server running on port ${PORT}`);
