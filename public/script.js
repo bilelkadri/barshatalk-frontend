@@ -1,75 +1,69 @@
 // Based on the original Glitch script.js, adapted for Render backend and text.html structure
+// v3: Added message clearing on disconnect/next
 
-// Corrected: Connect to the specific Render text chat server URL
 const socket = io("https://barshatalk-text-server.onrender.com"); 
 
-// Removed video-related variables: localStream, remoteStream, peerConnection, config
-let chatMode = "text"; // Assuming this script is only for text chat now
+let chatMode = "text"; 
 
 // UI elements (Ensure IDs match text_corrected.html)
-// Removed welcomeScreen, localVideo, remoteVideo as they are not in text_corrected.html or handled elsewhere
 const chatScreen = document.getElementById("chatScreen");
 const sendBtn = document.getElementById("sendBtn");
-// Corrected: Use "nextBtn" ID from text_corrected.html
 const nextBtn = document.getElementById("nextBtn"); 
 const messageInput = document.getElementById("messageInput");
 const messages = document.getElementById("messages");
-const statusText = document.getElementById("statusText"); // Added status text element
+const statusText = document.getElementById("statusText"); 
 
 // Sound elements (Ensure IDs match text_corrected.html)
-// Corrected: Use IDs from text_corrected.html
 const messageSound = document.getElementById("sendSound"); 
 const disconnectSound = document.getElementById("disconnectSound"); 
 
-console.log("Text chat script loaded (Based on Glitch version, adapted for Render).");
-
-// Removed startChat function as it was mainly for mode selection and video init
-// Connection happens automatically via io()
+console.log("Text chat script loaded (v3 - Glitch style + Clear History).");
 
 // --- Socket Event Handlers ---
 socket.on("connect", () => {
   console.log("Connected to text chat server");
   if (statusText) statusText.textContent = "✅ Connected, waiting for partner...";
+  // Clear messages on initial connect/reconnect
+  if (messages) messages.innerHTML = 
+      `<div class="system-message">⏳ Waiting for a partner...</div>`; 
 });
 
 socket.on("connect_error", (error) => {
     console.error("Text chat Socket.IO connection error:", error);
-    // Use the original appendMessage logic but add a system class
     appendMessage("⚠️ Connection error to text chat server.", "system"); 
     if (statusText) statusText.textContent = "❌ Connection Error";
 });
 
-// Corrected: Use "matched" event name based on server_corrected.js
 socket.on("matched", () => { 
-  appendMessage("🎉 Partner found!", "system");
+  // Clear previous messages before showing partner found
+  if (messages) messages.innerHTML = 
+      `<div class="system-message">🎉 Partner found!</div>`;
   if (statusText) statusText.textContent = "🟢 Chatting with a stranger";
-  // Removed video start logic
 });
 
 socket.on("waiting", () => {
-  appendMessage("⏳ Waiting for a partner...", "system");
+  // Clear previous messages before showing waiting message
+  if (messages) messages.innerHTML = 
+      `<div class="system-message">⏳ Waiting for a partner...</div>`;
   if (statusText) statusText.textContent = "⏳ Waiting for a partner...";
 });
 
 socket.on("message", (msg) => {
-  // Use the original appendMessage logic but pass type
   appendMessage(msg, "stranger"); 
 });
 
-// Corrected: Use "partnerDisconnected" event name based on server_corrected.js
 socket.on("partnerDisconnected", () => {
-    appendMessage("❌ Partner disconnected. Waiting for a new one...", "system");
+    // Clear previous messages first
+    if (messages) messages.innerHTML = 
+        `<div class="system-message">❌ Partner disconnected. Waiting for a new one...</div>`;
     if (statusText) statusText.textContent = "❌ Partner left. Waiting...";
 });
-
-// Removed WebRTC signaling listeners (offer, answer, ice-candidate)
 
 // --- UI Event Handlers ---
 
 function sendMessage() {
     const msg = messageInput.value;
     if (msg.trim()) {
-        // Use the original appendMessage logic but pass type
         appendMessage(msg, "you"); 
         socket.emit("message", msg); 
         messageInput.value = "";
@@ -81,14 +75,12 @@ function sendMessage() {
     }
 }
 
-// Send button click (with null check)
 if (sendBtn) {
     sendBtn.onclick = sendMessage;
 } else {
     console.error("Send button (sendBtn) not found!");
 }
 
-// Send on Enter key press (Added as requested)
 if (messageInput) {
     messageInput.addEventListener("keydown", (event) => {
         if (event.key === "Enter" && !event.shiftKey) {
@@ -100,11 +92,13 @@ if (messageInput) {
     console.error("Message input (messageInput) not found!");
 }
 
-// Next button click (using nextBtn ID, with null check)
 if (nextBtn) {
     nextBtn.onclick = () => {
       console.log("Next button clicked");
-      appendMessage("🏃 You requested the next partner...", "system");
+      // Clear messages first
+      if (messages) messages.innerHTML = 
+          `<div class="system-message">🏃 You requested the next partner...</div>
+           <div class="system-message">⏳ Waiting for a new text chat partner...</div>`;
       if (disconnectSound) {
           disconnectSound.play().catch(e => console.error("Error playing disconnect sound:", e));
       } else {
@@ -112,32 +106,26 @@ if (nextBtn) {
       }
       socket.emit("next"); 
       if (statusText) statusText.textContent = "⏳ Finding next partner...";
-      if (messages) messages.innerHTML = 
-          `<div class="system-message">⏳ Waiting for a new text chat partner...</div>`;
     };
 } else {
     console.error("Next button (nextBtn) not found!");
 }
 
-// --- Message Display Function (Restores Bubble Styling Concept) ---
-// This function now adds classes like the previous version to allow CSS styling
+// --- Message Display Function (Adds classes for CSS styling) ---
 function appendMessage(msg, type) {
     if (!messages) {
         console.error("Messages container not found!");
         return;
     }
     const messageElement = document.createElement("div");
-    // Add base class for potential common styling
-    // messageElement.classList.add("message-bubble"); 
-
-    // Add specific class based on sender type for styling (alignment, color)
+    
     if (type === "you") {
         messageElement.classList.add("message-you"); 
-        messageElement.textContent = "You: " + msg; // Keep original prefix if desired
+        messageElement.textContent = "You: " + msg; 
     } else if (type === "stranger") {
         messageElement.classList.add("message-stranger");
-        messageElement.textContent = "Stranger: " + msg; // Keep original prefix if desired
-    } else { // System message
+        messageElement.textContent = "Stranger: " + msg; 
+    } else { 
         messageElement.classList.add("system-message");
         messageElement.textContent = msg;
     }
@@ -145,9 +133,7 @@ function appendMessage(msg, type) {
     messages.scrollTop = messages.scrollHeight; 
 }
 
-// Removed video functions (startVideoChat, createPeerConnection)
-
-// Emoji Picker Logic (Keep as is, assuming elements exist in text_corrected.html)
+// Emoji Picker Logic 
 const emojiBtn = document.getElementById("emojiBtn");
 const emojiPicker = document.getElementById("emojiPicker");
 
@@ -164,8 +150,9 @@ if (emojiBtn && emojiPicker && messageInput) {
 }
 
 // Reminder about Audio Errors
-// The 403 errors for audio files from cdn.pixabay.com suggest hotlinking protection.
-// Download the MP3 files and host them within your project's 'public' folder.
-// Update the <audio> tags in text.html to use local paths (e.g., src="/sounds/send.mp3").
+// Download MP3 files and host them locally in /public/sounds/
+// Update <audio> tags in text.html: src="/sounds/your_sound.mp3"
+
+
 
 
