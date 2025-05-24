@@ -1,4 +1,4 @@
-const socket = io();
+const socket = io(https://barshatalk-text-server.onrender.com);
 
 let localStream;
 let remoteStream;
