@@ -1,109 +1,131 @@
 const socket = io("https://barshatalk-text-server.onrender.com");
 
 // UI elements
-// Corrected: Removed welcomeScreen reference as it's not in text_corrected.html
-// const welcomeScreen = document.getElementById("welcomeScreen"); 
 const chatScreen = document.getElementById("chatScreen");
 const sendBtn = document.getElementById("sendBtn");
-// Corrected: Changed ID from disconnectBtn to nextBtn to match text_corrected.html
 const nextBtn = document.getElementById("nextBtn"); 
 const messageInput = document.getElementById("messageInput");
 const messages = document.getElementById("messages");
+const statusText = document.getElementById("statusText"); // Added status text element
 
-// Add message sent sound
-// Corrected: Using the sound element from text_corrected.html
+// Sound elements (check if IDs match text.html)
 const messageSound = document.getElementById("sendSound"); 
-const disconnectSound = document.getElementById("disconnectSound"); // Added for potential use
+const disconnectSound = document.getElementById("disconnectSound"); 
 
-// Handle UI - Simplified as this script is only for text.html
-console.log("Text chat script loaded.");
+console.log("Text chat script loaded (v2 with styling + Enter key).");
 
-// Socket setup for TEXT CHAT ONLY
+// --- Socket Event Handlers ---
 socket.on("connect", () => {
   console.log("Connected to text chat server");
-  // Update status text if needed
-  const statusText = document.getElementById("statusText");
   if (statusText) statusText.textContent = "✅ Connected, waiting for partner...";
 });
 
 socket.on("connect_error", (error) => {
     console.error("Text chat Socket.IO connection error:", error);
-    appendMessage("⚠️ Connection error to text chat server.");
-    const statusText = document.getElementById("statusText");
+    appendMessage("⚠️ Connection error to text chat server.", "system");
     if (statusText) statusText.textContent = "❌ Connection Error";
 });
 
-socket.on("matched", () => { // Assuming server emits 'matched'
-  appendMessage("🎉 Partner found! Start chatting.");
-  const statusText = document.getElementById("statusText");
+socket.on("matched", () => { 
+  appendMessage("🎉 Partner found! Start chatting.", "system");
   if (statusText) statusText.textContent = "🟢 Chatting with a stranger";
 });
 
 socket.on("waiting", () => {
-  appendMessage("⏳ Waiting for a text chat partner...");
-  const statusText = document.getElementById("statusText");
+  appendMessage("⏳ Waiting for a text chat partner...", "system");
   if (statusText) statusText.textContent = "⏳ Waiting for a partner...";
 });
 
-// Check if sendBtn exists before adding onclick
-if (sendBtn) {
-    sendBtn.onclick = () => {
-      const msg = messageInput.value;
-      if (msg.trim()) {
-        appendMessage("You: " + msg);
+socket.on("message", (msg) => {
+  appendMessage(msg, "stranger"); // Pass "stranger" type
+});
+
+socket.on("partnerDisconnected", () => {
+    appendMessage("❌ Partner disconnected. Waiting for a new one...", "system");
+    if (statusText) statusText.textContent = "❌ Partner left. Waiting...";
+});
+
+// --- UI Event Handlers ---
+
+function sendMessage() {
+    const msg = messageInput.value;
+    if (msg.trim()) {
+        appendMessage(msg, "you"); // Pass "you" type
         socket.emit("message", msg); 
         messageInput.value = "";
-        if (messageSound) messageSound.play(); 
-      }
-    };
+        if (messageSound) {
+            messageSound.play().catch(e => console.error("Error playing send sound:", e));
+        } else {
+            console.warn("Send sound element not found");
+        }
+    }
+}
+
+// Send button click
+if (sendBtn) {
+    sendBtn.onclick = sendMessage;
 } else {
     console.error("Send button (sendBtn) not found!");
 }
 
-// Check if nextBtn exists before adding onclick
+// Send on Enter key press in message input
+if (messageInput) {
+    messageInput.addEventListener('keydown', (event) => {
+        // Send if Enter is pressed without Shift key
+        if (event.key === 'Enter' && !event.shiftKey) { 
+            event.preventDefault(); // Prevent adding a new line
+            sendMessage(); // Call the send message function
+        }
+    });
+} else {
+    console.error("Message input (messageInput) not found!");
+}
+
+// Next button click
 if (nextBtn) {
     nextBtn.onclick = () => {
       console.log("Next button clicked");
-      appendMessage("🏃 You requested the next partner...");
-      if (disconnectSound) disconnectSound.play();
-      // Emit 'next' event to the server to handle partner change
+      appendMessage("🏃 You requested the next partner...", "system");
+      if (disconnectSound) {
+          disconnectSound.play().catch(e => console.error("Error playing disconnect sound:", e));
+      } else {
+          console.warn("Disconnect sound element not found");
+      }
       socket.emit("next"); 
-      // Server should handle putting user back in waiting queue and notifying old partner
-      // Client side just waits for 'waiting' or 'matched' event from server
-      const statusText = document.getElementById("statusText");
       if (statusText) statusText.textContent = "⏳ Finding next partner...";
-      // Clear previous messages for the new chat
-      messages.innerHTML = ''; 
-      appendMessage("⏳ Waiting for a new text chat partner...");
+      if (messages) messages.innerHTML = 
+          '<div class="system-message">⏳ Waiting for a new text chat partner...</div>'; // Clear messages and show waiting
     };
 } else {
     console.error("Next button (nextBtn) not found!");
 }
 
+// --- Message Display Function (Restores Bubble Styling) ---
+function appendMessage(msg, type) {
+    if (!messages) {
+        console.error("Messages container not found!");
+        return;
+    }
 
-socket.on("message", (msg) => {
-  appendMessage("Stranger: " + msg);
-});
+    const messageElement = document.createElement('div');
+    messageElement.classList.add('message-bubble'); // Base class for all bubbles
 
-socket.on("partnerDisconnected", () => {
-    appendMessage("❌ Partner disconnected. Waiting for a new one...");
-    const statusText = document.getElementById("statusText");
-    if (statusText) statusText.textContent = "❌ Partner left. Waiting...";
-    // Server should automatically put this user back in the waiting queue
-});
+    if (type === 'you') {
+        messageElement.classList.add('message-you'); // Class for your messages (e.g., align right, blue bg)
+        messageElement.textContent = msg;
+    } else if (type === 'stranger') {
+        messageElement.classList.add('message-stranger'); // Class for stranger's messages (e.g., align left, gray bg)
+        messageElement.textContent = msg;
+    } else { // Default to system message
+        messageElement.classList.add('system-message'); // Class for system messages (e.g., centered, italic)
+        messageElement.textContent = msg;
+    }
 
-
-// Message box
-function appendMessage(msg) {
-  if (messages) {
-      messages.innerHTML += `<div class="system-message">${msg}</div>`; // Added class for styling
-      messages.scrollTop = messages.scrollHeight;
-  } else {
-      console.error("Messages container not found!");
-  }
+    messages.appendChild(messageElement);
+    messages.scrollTop = messages.scrollHeight; // Scroll to bottom
 }
 
-// Emoji Picker Logic (from text.html)
+// --- Emoji Picker Logic (Keep as is) ---
 const emojiBtn = document.getElementById('emojiBtn');
 const emojiPicker = document.getElementById('emojiPicker');
 
@@ -120,4 +142,10 @@ if (emojiBtn && emojiPicker && messageInput) {
     console.error("Emoji button, picker, or message input not found!");
 }
 
+// --- Reminder about Audio Errors ---
+// The 403 errors for audio files from cdn.pixabay.com suggest hotlinking protection.
+// For reliable sound, download the MP3 files and host them within your project's 'public' folder.
+// Then update the <audio> tags in text.html to use local paths, e.g.:
+// <audio id="sendSound" src="/sounds/send.mp3"></audio>
+// <audio id="disconnectSound" src="/sounds/disconnect.mp3"></audio>
 
