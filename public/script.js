@@ -1,83 +1,123 @@
 const socket = io("https://barshatalk-text-server.onrender.com");
 
 // UI elements
-const welcomeScreen = document.getElementById("welcomeScreen");
+// Corrected: Removed welcomeScreen reference as it's not in text_corrected.html
+// const welcomeScreen = document.getElementById("welcomeScreen"); 
 const chatScreen = document.getElementById("chatScreen");
-// Remove video elements references if they are not used for text chat UI
-// const localVideo = document.getElementById("localVideo");
-// const remoteVideo = document.getElementById("remoteVideo");
 const sendBtn = document.getElementById("sendBtn");
-const disconnectBtn = document.getElementById("disconnectBtn");
+// Corrected: Changed ID from disconnectBtn to nextBtn to match text_corrected.html
+const nextBtn = document.getElementById("nextBtn"); 
 const messageInput = document.getElementById("messageInput");
 const messages = document.getElementById("messages");
 
 // Add message sent sound
-const messageSound = new Audio("https://cdn.glitch.global/498eeaf2-e9b7-4a5d-bb55-137a5bc68843/notification-5-337824.mp3?v=1746932737989");
+// Corrected: Using the sound element from text_corrected.html
+const messageSound = document.getElementById("sendSound"); 
+const disconnectSound = document.getElementById("disconnectSound"); // Added for potential use
 
-// Handle UI
-// This function might need adjustment depending on how text/video modes are selected in index.html
-function startChat(mode) {
-  // Assuming this script is only for text chat page (text.html)
-  // If it's loaded on video.html too, this needs more logic
-  if (mode === "text") {
-      welcomeScreen.classList.remove("active");
-      chatScreen.classList.add("active");
-      // socket.connect(); // io() usually connects automatically
-      console.log("Attempting to connect to text chat server...");
-  }
-}
+// Handle UI - Simplified as this script is only for text.html
+console.log("Text chat script loaded.");
 
 // Socket setup for TEXT CHAT ONLY
 socket.on("connect", () => {
   console.log("Connected to text chat server");
-  // Maybe emit a 'ready' event for text chat here if the server expects it
+  // Update status text if needed
+  const statusText = document.getElementById("statusText");
+  if (statusText) statusText.textContent = "✅ Connected, waiting for partner...";
 });
 
 socket.on("connect_error", (error) => {
     console.error("Text chat Socket.IO connection error:", error);
     appendMessage("⚠️ Connection error to text chat server.");
+    const statusText = document.getElementById("statusText");
+    if (statusText) statusText.textContent = "❌ Connection Error";
 });
 
-socket.on("partner-found", () => {
-  appendMessage("🎉 Partner found for text chat!");
-  // No video logic here
+socket.on("matched", () => { // Assuming server emits 'matched'
+  appendMessage("🎉 Partner found! Start chatting.");
+  const statusText = document.getElementById("statusText");
+  if (statusText) statusText.textContent = "🟢 Chatting with a stranger";
 });
 
 socket.on("waiting", () => {
   appendMessage("⏳ Waiting for a text chat partner...");
+  const statusText = document.getElementById("statusText");
+  if (statusText) statusText.textContent = "⏳ Waiting for a partner...";
 });
 
-sendBtn.onclick = () => {
-  const msg = messageInput.value;
-  if (msg.trim()) {
-    appendMessage("You: " + msg);
-    socket.emit("message", msg); // Ensure server expects 'message' event
-    messageInput.value = "";
-    messageSound.play(); // Play sound when message is sent
-  }
-};
+// Check if sendBtn exists before adding onclick
+if (sendBtn) {
+    sendBtn.onclick = () => {
+      const msg = messageInput.value;
+      if (msg.trim()) {
+        appendMessage("You: " + msg);
+        socket.emit("message", msg); 
+        messageInput.value = "";
+        if (messageSound) messageSound.play(); 
+      }
+    };
+} else {
+    console.error("Send button (sendBtn) not found!");
+}
 
-disconnectBtn.onclick = () => {
-  socket.disconnect();
-  // Consider redirecting or just showing welcome screen instead of reload
-  window.location.reload();
-};
+// Check if nextBtn exists before adding onclick
+if (nextBtn) {
+    nextBtn.onclick = () => {
+      console.log("Next button clicked");
+      appendMessage("🏃 You requested the next partner...");
+      if (disconnectSound) disconnectSound.play();
+      // Emit 'next' event to the server to handle partner change
+      socket.emit("next"); 
+      // Server should handle putting user back in waiting queue and notifying old partner
+      // Client side just waits for 'waiting' or 'matched' event from server
+      const statusText = document.getElementById("statusText");
+      if (statusText) statusText.textContent = "⏳ Finding next partner...";
+      // Clear previous messages for the new chat
+      messages.innerHTML = ''; 
+      appendMessage("⏳ Waiting for a new text chat partner...");
+    };
+} else {
+    console.error("Next button (nextBtn) not found!");
+}
+
 
 socket.on("message", (msg) => {
   appendMessage("Stranger: " + msg);
 });
 
-// Removed WebRTC signaling listeners (offer, answer, ice-candidate)
+socket.on("partnerDisconnected", () => {
+    appendMessage("❌ Partner disconnected. Waiting for a new one...");
+    const statusText = document.getElementById("statusText");
+    if (statusText) statusText.textContent = "❌ Partner left. Waiting...";
+    // Server should automatically put this user back in the waiting queue
+});
+
 
 // Message box
 function appendMessage(msg) {
-  messages.innerHTML += `<div>${msg}</div>`;
-  messages.scrollTop = messages.scrollHeight;
+  if (messages) {
+      messages.innerHTML += `<div class="system-message">${msg}</div>`; // Added class for styling
+      messages.scrollTop = messages.scrollHeight;
+  } else {
+      console.error("Messages container not found!");
+  }
 }
 
-// Removed video functions (startVideoChat, createPeerConnection)
+// Emoji Picker Logic (from text.html)
+const emojiBtn = document.getElementById('emojiBtn');
+const emojiPicker = document.getElementById('emojiPicker');
 
-// If startChat is called from HTML, ensure it's called with 'text' mode
-// e.g., <button onclick="startChat('text')">Start Text Chat</button>
+if (emojiBtn && emojiPicker && messageInput) {
+    emojiBtn.onclick = () => {
+        emojiPicker.style.display = emojiPicker.style.display === 'none' ? 'block' : 'none';
+    };
+
+    emojiPicker.addEventListener('emoji-click', event => {
+        messageInput.value += event.detail.unicode;
+        emojiPicker.style.display = 'none';
+    });
+} else {
+    console.error("Emoji button, picker, or message input not found!");
+}
 
 
