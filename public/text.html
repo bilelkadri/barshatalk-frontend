@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BarshaTalk – Text Chat</title>
+    <script
+      type="module"
+      src="https://cdn.jsdelivr.net/npm/emoji-picker-element@1/index.js"
+    ></script>
+    <script
+      type="module"
+      src="https://cdn.socket.io/4.7.2/socket.io.esm.min.js"
+    ></script>
+    <style>
+      body {
+        margin: 0;
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        background-color: #0a0a0a;
+        color: #ffffff;
+        overflow: hidden;
+      }
+
+      #statusText.glitch {
+        animation: glitch 0.5s linear;
+      }
+
+      @keyframes glitch {
+        0% {
+          transform: translateX(0);
+        }
+        20% {
+          transform: translateX(-2px);
+        }
+        40% {
+          transform: translateX(2px);
+        }
+        60% {
+          transform: translateX(-1px);
+        }
+        80% {
+          transform: translateX(1px);
+        }
+        100% {
+          transform: translateX(0);
+        }
+      }
+
+      #inputWrapper {
+        position: relative;
+        width: 100%;
+        max-width: 500px;
+      }
+
+      #messageInput {
+        width: 100%;
+        padding: 12px 40px 12px 12px;
+        background: #1a1a1a;
+        color: #fff;
+        border: 1px solid #333;
+        border-radius: 5px;
+        box-sizing: border-box;
+      }
+
+      .emoji-button {
+        position: absolute;
+        top: 50%;
+        right: 10px;
+        transform: translateY(-50%);
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        font-size: 1.3em;
+        z-index: 5;
+      }
+
+      emoji-picker {
+        position: absolute;
+        bottom: 120%;
+        right: 0;
+        z-index: 10;
+        display: none;
+        max-height: 300px;
+        overflow-y: auto;
+      }
+
+      .system-message {
+        font-style: italic;
+        color: #ccc;
+        text-align: center;
+        margin: 10px 0;
+        font-size: 0.9em;
+      }
+    </style>
+  </head>
+  <body>
+    <video
+      autoplay
+      muted
+      loop
+      id="bgVideo"
+      style="
+        position: fixed;
+        right: 0;
+        bottom: 0;
+        min-width: 100%;
+        min-height: 100%;
+        object-fit: cover;
+        z-index: -1;
+      "
+    >
+      <source
+        src="https://cdn.glitch.global/498eeaf2-e9b7-4a5d-bb55-137a5bc68843/8688681-hd_1920_1080_25fps.mp4?v=1746920711781"
+        type="video/mp4"
+      />
+      Your browser does not support the video tag.
+    </video>
+
+    <div
+      id="chatScreen"
+      style="
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        background-color: rgba(0, 0, 0, 0.5);
+        box-sizing: border-box;
+      "
+    >
+      <h2
+        id="statusText"
+        style="font-size: 1.5em; color: #00ffff; text-shadow: 0 0 8px #00ffff"
+      >
+        ⌛ Waiting for a stranger...
+      </h2>
+
+      <div
+        id="messages"
+        style="
+          height: 300px;
+          overflow-y: auto;
+          border-radius: 10px;
+          padding: 15px;
+          width: 100%;
+          max-width: 500px;
+          background-color: rgba(0, 0, 0, 0.5);
+          margin-top: 20px;
+        "
+      ></div>
+
+      <div
+        style="
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 10px;
+          margin-top: 15px;
+        "
+      >
+        <div id="inputWrapper">
+          <input
+            id="messageInput"
+            type="text"
+            placeholder="Type your message..."
+          />
+          <button class="emoji-button" id="emojiBtn">😊</button>
+          <emoji-picker id="emojiPicker"></emoji-picker>
+        </div>
+        <div style="display: flex; gap: 10px">
+          <button
+            id="sendBtn"
+            style="
+              padding: 10px 20px;
+              background: #00ffff;
+              color: #000;
+              border: none;
+              border-radius: 5px;
+              box-shadow: 0 0 8px #00ffff;
+            "
+          >
+            Send
+          </button>
+          <button
+            id="nextBtn"
+            style="
+              padding: 10px 20px;
+              background: #ff4444;
+              color: #fff;
+              border: none;
+              border-radius: 5px;
+            "
+          >
+            Next
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <audio
+      id="sendSound"
+      src="https://cdn.pixabay.com/audio/2022/03/15/audio_42c925a5e4.mp3"
+    ></audio>
+    <audio
+      id="disconnectSound"
+      src="https://cdn.pixabay.com/audio/2022/03/21/audio_608e7cbbdb.mp3"
+    ></audio>
+
+    <script type="module">
+      import { io } from "https://cdn.socket.io/4.7.2/socket.io.esm.min.js";
+
+      const socket = io();
+
+      const sendBtn = document.getElementById("sendBtn");
+      const nextBtn = document.getElementById("nextBtn");
+      const messageInput = document.getElementById("messageInput");
+      const messagesDiv = document.getElementById("messages");
+      const statusText = document.getElementById("statusText");
+      const sendSound = document.getElementById("sendSound");
+      const disconnectSound = document.getElementById("disconnectSound");
+      const emojiBtn = document.getElementById("emojiBtn");
+      const emojiPicker = document.getElementById("emojiPicker");
+
+      function appendMessage(text, isOwn = true) {
+        const msg = document.createElement("div");
+        msg.textContent = text;
+        msg.style.maxWidth = "70%";
+        msg.style.padding = "10px 15px";
+        msg.style.margin = "8px";
+        msg.style.borderRadius = "20px";
+        msg.style.backgroundColor = isOwn ? "#00ffff" : "#ff00ff";
+        msg.style.color = isOwn ? "#000" : "#fff";
+        msg.style.alignSelf = isOwn ? "flex-end" : "flex-start";
+        msg.style.boxShadow = "0 0 10px " + (isOwn ? "#00ffff" : "#ff00ff");
+        msg.style.fontSize = "0.95em";
+        msg.style.display = "inline-block";
+        msg.style.wordWrap = "break-word";
+        msg.style.textAlign = "left";
+
+        const wrapper = document.createElement("div");
+        wrapper.style.display = "flex";
+        wrapper.style.justifyContent = isOwn ? "flex-end" : "flex-start";
+        wrapper.appendChild(msg);
+        messagesDiv.appendChild(wrapper);
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+      }
+
+      function appendSystemMessage(text) {
+        const msg = document.createElement("div");
+        msg.className = "system-message";
+        msg.textContent = text;
+        messagesDiv.appendChild(msg);
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+      }
+
+      sendBtn.onclick = () => {
+        const msg = messageInput.value.trim();
+        if (msg) {
+          appendMessage(msg, true);
+          socket.emit("message", msg);
+          messageInput.value = "";
+          sendSound.play();
+        }
+      };
+
+      nextBtn.onclick = () => {
+        socket.emit("next");
+        statusText.textContent = "⌛ Searching for a new stranger...";
+        messagesDiv.innerHTML = "";
+      };
+
+      messageInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          sendBtn.click();
+        }
+      });
+
+      emojiBtn.addEventListener("click", () => {
+        emojiPicker.style.display =
+          emojiPicker.style.display === "none" ? "block" : "none";
+      });
+
+      emojiPicker.addEventListener("emoji-click", (event) => {
+        messageInput.value += event.detail.unicode;
+        emojiPicker.style.display = "none";
+        messageInput.focus();
+      });
+
+      document.addEventListener("click", (e) => {
+        if (!emojiPicker.contains(e.target) && e.target !== emojiBtn) {
+          emojiPicker.style.display = "none";
+        }
+      });
+
+      socket.on("waiting", () => {
+        statusText.textContent = "⌛ Waiting for a stranger...";
+      });
+
+      socket.on("matched", () => {
+        statusText.textContent = "💬 Connected to a Stranger";
+        statusText.classList.add("glitch");
+        appendSystemMessage("Chat started");
+        setTimeout(() => statusText.classList.remove("glitch"), 500);
+      });
+
+      socket.on("partnerDisconnected", () => {
+        statusText.textContent = "❌ Stranger disconnected";
+        statusText.classList.add("glitch");
+        appendSystemMessage("Partner disconnected");
+        disconnectSound.play();
+        setTimeout(() => {
+          statusText.textContent = "⌛ Waiting for a stranger...";
+          statusText.classList.remove("glitch");
+        }, 1500);
+      });
+
+      socket.on("message", (msg) => {
+        appendMessage(msg, false);
+      });
+    </script>
+  </body>
+</html>
