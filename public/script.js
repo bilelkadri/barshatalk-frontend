@@ -1,78 +1,197 @@
-// Based on the original Glitch script.js, adapted for Render backend and text.html structure
-// v3: Added message clearing on disconnect/next
+// script.js - Updated Full Code
 
-const socket = io("https://barshatalk-text-server.onrender.com"); 
+// Use a variable for the server URL (Point 7)
+// Ideally, this value would come from configuration or an injected environment variable
+// For now, using the direct URL but stored in a variable for easier future changes.
+const TEXT_SERVER_URL = process.env.REACT_APP_TEXT_SERVER_URL || "https://barshatalk-text-server.onrender.com"; 
 
-let chatMode = "text"; 
+// --- Socket.IO Connection ---
+let socket; 
+try {
+  socket = io(TEXT_SERVER_URL, {
+    // Optional: Add transports if needed, but default usually works
+    // transports: ["websocket", "polling"] 
+  });
+} catch (error) {
+  console.error("Failed to initialize Socket.IO:", error);
+  // Display an error message to the user on the page if the socket fails to initialize
+  const statusTextElement = document.getElementById("statusText");
+  if (statusTextElement) {
+    statusTextElement.textContent = "❌ Critical Error: Cannot connect to chat service.";
+    statusTextElement.style.color = "#ff4444"; // Make error prominent
+  }
+  // Disable chat functionality if socket fails
+  const sendBtn = document.getElementById("sendBtn");
+  const nextBtn = document.getElementById("nextBtn");
+  const messageInput = document.getElementById("messageInput");
+  if (sendBtn) sendBtn.disabled = true;
+  if (nextBtn) nextBtn.disabled = true;
+  if (messageInput) messageInput.disabled = true;
+  // Prevent further script execution if socket is unavailable
+  throw new Error("Socket.IO initialization failed."); 
+}
 
-// UI elements (Ensure IDs match text_corrected.html)
+
+// --- UI Elements ---
 const chatScreen = document.getElementById("chatScreen");
 const sendBtn = document.getElementById("sendBtn");
 const nextBtn = document.getElementById("nextBtn"); 
 const messageInput = document.getElementById("messageInput");
 const messages = document.getElementById("messages");
 const statusText = document.getElementById("statusText"); 
+const emojiBtn = document.getElementById("emojiBtn");
+const emojiPicker = document.getElementById("emojiPicker");
 
-// Sound elements (Ensure IDs match text_corrected.html)
+// --- Sound Elements ---
 const messageSound = document.getElementById("sendSound"); 
 const disconnectSound = document.getElementById("disconnectSound"); 
 
-console.log("Text chat script loaded (v3 - Glitch style + Clear History).");
+console.log("Text chat script loaded (v4 - Updated with Error Handling & Config).");
 
 // --- Socket Event Handlers ---
+
 socket.on("connect", () => {
-  console.log("Connected to text chat server");
+  console.log("Connected to text chat server:", socket.id);
   if (statusText) statusText.textContent = "✅ Connected, waiting for partner...";
   // Clear messages on initial connect/reconnect
   if (messages) messages.innerHTML = 
       `<div class="system-message">⏳ Waiting for a partner...</div>`; 
 });
 
+// Improved Connection Error Handling (Point 4)
 socket.on("connect_error", (error) => {
     console.error("Text chat Socket.IO connection error:", error);
-    appendMessage("⚠️ Connection error to text chat server.", "system"); 
-    if (statusText) statusText.textContent = "❌ Connection Error";
+    appendMessage(`⚠️ Connection error: ${error.message}. Trying to reconnect...`, "system"); 
+    if (statusText) {
+        statusText.textContent = "❌ Connection Error";
+        statusText.style.color = "#ff4444"; // Make error prominent
+    }
+    // Optionally disable buttons during connection error
+    if (sendBtn) sendBtn.disabled = true;
 });
 
+// Handle reconnection attempts and success
+socket.io.on("reconnect_attempt", (attempt) => {
+    console.log(`Reconnection attempt ${attempt}...`);
+    if (statusText) statusText.textContent = `⏳ Reconnecting (${attempt})...`;
+});
+
+socket.io.on("reconnect_failed", () => {
+    console.error("Reconnection failed.");
+    appendMessage("⚠️ Reconnection failed. Please check your internet connection.", "system");
+    if (statusText) statusText.textContent = "❌ Reconnection Failed";
+});
+
+socket.io.on("reconnect", (attempt) => {
+    console.log(`Reconnected successfully after ${attempt} attempts.`);
+    if (statusText) {
+        statusText.textContent = "✅ Reconnected. Waiting for partner...";
+        statusText.style.color = "#00ffff"; // Reset color on success
+    }
+    if (sendBtn) sendBtn.disabled = false; // Re-enable send button
+    // Server should handle putting the user back into the queue upon reconnection
+});
+
+// General Socket Error Handling (Point 4)
+socket.on("error", (err) => {
+    console.error("Text chat socket error:", err);
+    // Display a generic error or specific one if available
+    const errorMessage = (typeof err === "string") ? err : (err.message || "An unknown socket error occurred.");
+    appendMessage(`⚠️ Socket error: ${errorMessage}`, "system");
+    // Decide if the error is critical and requires UI changes
+});
+
+// Handle custom system errors from server (optional)
+socket.on("system_error", (errorMessage) => {
+    console.warn("System error from server:", errorMessage);
+    appendMessage(`⚠️ Server: ${errorMessage}`, "system");
+});
+
+
 socket.on("matched", () => { 
+  console.log("Partner matched!");
   // Clear previous messages before showing partner found
   if (messages) messages.innerHTML = 
-      `<div class="system-message">🎉 Partner found!</div>`;
-  if (statusText) statusText.textContent = "🟢 Chatting with a stranger";
+      `<div class="system-message">🎉 Partner found! Say hi!</div>`;
+  if (statusText) {
+      statusText.textContent = "🟢 Chatting with a stranger";
+      statusText.style.color = "#00ff00"; // Green for active chat
+  }
+  if (sendBtn) sendBtn.disabled = false; // Ensure send button is enabled
+  if (messageInput) messageInput.disabled = false; // Ensure input is enabled
+  if (messageInput) messageInput.focus(); // Focus input field
 });
 
 socket.on("waiting", () => {
+  console.log("Waiting for partner...");
   // Clear previous messages before showing waiting message
   if (messages) messages.innerHTML = 
       `<div class="system-message">⏳ Waiting for a partner...</div>`;
-  if (statusText) statusText.textContent = "⏳ Waiting for a partner...";
+  if (statusText) {
+      statusText.textContent = "⏳ Waiting for a partner...";
+      statusText.style.color = "#00ffff"; // Default cyan color
+  }
+   if (sendBtn) sendBtn.disabled = true; // Disable send while waiting
+   if (messageInput) messageInput.disabled = true; // Disable input while waiting
 });
 
 socket.on("message", (msg) => {
+  console.log("Message received from stranger:", msg);
   appendMessage(msg, "stranger"); 
+  // Optional: Play a notification sound for incoming messages
+  // const incomingSound = document.getElementById("incomingSound"); // Add <audio id="incomingSound">
+  // if (incomingSound) incomingSound.play().catch(e => console.error("Error playing incoming sound:", e));
 });
 
 socket.on("partnerDisconnected", () => {
+    console.log("Partner disconnected.");
     // Clear previous messages first
     if (messages) messages.innerHTML = 
         `<div class="system-message">❌ Partner disconnected. Waiting for a new one...</div>`;
-    if (statusText) statusText.textContent = "❌ Partner left. Waiting...";
+    if (statusText) {
+        statusText.textContent = "❌ Partner left. Waiting...";
+        statusText.style.color = "#ff4444"; // Red for disconnected
+    }
+    if (disconnectSound) {
+        disconnectSound.play().catch(e => console.error("Error playing disconnect sound:", e));
+    } else {
+        console.warn("Disconnect sound element not found");
+    }
+    // Server should automatically put this user back into the waiting queue
+    // UI should reflect waiting state
+    if (sendBtn) sendBtn.disabled = true; 
+    if (messageInput) messageInput.disabled = true; 
 });
 
 // --- UI Event Handlers ---
 
 function sendMessage() {
+    if (!socket || !socket.connected) {
+        appendMessage("⚠️ Cannot send message: Not connected to server.", "system");
+        return;
+    }
+    
     const msg = messageInput.value;
-    if (msg.trim()) {
-        appendMessage(msg, "you"); 
-        socket.emit("message", msg); 
-        messageInput.value = "";
+    const trimmedMsg = msg.trim();
+
+    // Client-side Validation (Point 2)
+    if (trimmedMsg && trimmedMsg.length <= 500) { 
+        appendMessage(trimmedMsg, "you"); // Display the trimmed message
+        socket.emit("message", trimmedMsg); // Send the trimmed message
+        messageInput.value = ""; // Clear input after sending
         if (messageSound) {
             messageSound.play().catch(e => console.error("Error playing send sound:", e));
         } else {
             console.warn("Send sound element not found");
         }
+    } else if (trimmedMsg.length > 500) {
+        // Inform user message is too long
+        appendMessage("⚠️ Your message is too long (max 500 characters).", "system");
+    } else {
+        // Handle empty message case if needed, though trim() already covers spaces
+        console.log("Empty message not sent.");
     }
+    messageInput.focus(); // Keep focus on input
 }
 
 if (sendBtn) {
@@ -84,8 +203,10 @@ if (sendBtn) {
 if (messageInput) {
     messageInput.addEventListener("keydown", (event) => {
         if (event.key === "Enter" && !event.shiftKey) {
-            event.preventDefault(); 
-            sendMessage();
+            event.preventDefault(); // Prevent newline on Enter
+            if (!sendBtn || !sendBtn.disabled) { // Only send if button exists and is enabled
+                sendMessage();
+            }
         }
     });
 } else {
@@ -94,6 +215,10 @@ if (messageInput) {
 
 if (nextBtn) {
     nextBtn.onclick = () => {
+      if (!socket || !socket.connected) {
+          appendMessage("⚠️ Cannot request next: Not connected to server.", "system");
+          return;
+      }
       console.log("Next button clicked");
       // Clear messages first
       if (messages) messages.innerHTML = 
@@ -105,13 +230,20 @@ if (nextBtn) {
           console.warn("Disconnect sound element not found");
       }
       socket.emit("next"); 
-      if (statusText) statusText.textContent = "⏳ Finding next partner...";
+      if (statusText) {
+          statusText.textContent = "⏳ Finding next partner...";
+          statusText.style.color = "#00ffff"; // Reset color
+      }
+      // UI should reflect waiting state
+      if (sendBtn) sendBtn.disabled = true; 
+      if (messageInput) messageInput.disabled = true; 
     };
 } else {
     console.error("Next button (nextBtn) not found!");
 }
 
-// --- Message Display Function (Adds classes for CSS styling) ---
+// --- Message Display Function ---
+// Adds classes for CSS styling from style.css
 function appendMessage(msg, type) {
     if (!messages) {
         console.error("Messages container not found!");
@@ -119,36 +251,55 @@ function appendMessage(msg, type) {
     }
     const messageElement = document.createElement("div");
     
+    // Add base class for all messages
+    // messageElement.classList.add("message"); // Assuming style.css uses .message-you, .message-stranger, .system-message directly
+
     if (type === "you") {
         messageElement.classList.add("message-you"); 
-        messageElement.textContent = "You: " + msg; 
+        // No need to add "You:" prefix if CSS handles alignment/styling
+        messageElement.textContent = msg; 
     } else if (type === "stranger") {
         messageElement.classList.add("message-stranger");
-        messageElement.textContent = "Stranger: " + msg; 
-    } else { 
+        // No need to add "Stranger:" prefix if CSS handles alignment/styling
+        messageElement.textContent = msg; 
+    } else { // System messages
         messageElement.classList.add("system-message");
         messageElement.textContent = msg;
     }
     messages.appendChild(messageElement);
+    // Scroll to the bottom to show the latest message
     messages.scrollTop = messages.scrollHeight; 
 }
 
-// Emoji Picker Logic 
-const emojiBtn = document.getElementById("emojiBtn");
-const emojiPicker = document.getElementById("emojiPicker");
-
+// --- Emoji Picker Logic --- 
 if (emojiBtn && emojiPicker && messageInput) {
-    emojiBtn.onclick = () => {
-        emojiPicker.style.display = emojiPicker.style.display === "none" ? "block" : "none";
+    emojiBtn.onclick = (event) => {
+        event.stopPropagation(); // Prevent click from closing picker immediately
+        emojiPicker.style.display = emojiPicker.style.display === "none" || emojiPicker.style.display === "" ? "block" : "none";
     };
     emojiPicker.addEventListener("emoji-click", (event) => {
         messageInput.value += event.detail.unicode;
         emojiPicker.style.display = "none";
+        messageInput.focus(); // Return focus to input
     });
+    // Close picker if clicking outside
+    document.addEventListener("click", (event) => {
+        // Check if emojiPicker exists and is currently displayed
+        if (emojiPicker && emojiPicker.style.display === "block" && emojiBtn && !emojiPicker.contains(event.target) && event.target !== emojiBtn) {
+            emojiPicker.style.display = "none";
+        }
+    });
+
 } else {
-    console.error("Emoji button, picker, or message input not found!");
+    console.error("Emoji button, picker, or message input not found! Emoji functionality disabled.");
+    if(emojiBtn) emojiBtn.style.display = "none"; // Hide button if picker is missing
 }
 
-// Reminder about Audio Errors
-// Download MP3 files and host them locally in /public/sounds/
-// Update <audio> tags in text.html: src="/sounds/your_sound.mp3"
+// --- Initial State ---
+// Disable send button and input initially until connected and matched
+if (sendBtn) sendBtn.disabled = true;
+if (messageInput) messageInput.disabled = true;
+
+// Reminder about Audio Errors (from original code)
+// Ensure audio files are accessible. Consider hosting locally.
+// Example: <audio id="sendSound" src="/sounds/send.mp3"></audio>
