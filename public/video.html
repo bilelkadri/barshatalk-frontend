@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <title>BarshaTalk – Video Chat</title>
+    <!-- Styles are kept as provided by the user -->
     <style>
       body {
         margin: 0;
@@ -32,6 +33,8 @@
         height: 100vh;
         box-sizing: border-box;
         background-color: rgba(0, 0, 0, 0.5);
+        /* Hide initially until profile is submitted */
+        display: none; 
       }
 
       #videos {
@@ -119,7 +122,7 @@
         width: 40px;
         height: 60px;
         position: relative;
-        display: none;
+        display: none; /* Hidden by default, shown on mobile */
       }
 
       @media (max-width: 768px) {
@@ -179,6 +182,13 @@
         cursor: pointer;
         font-weight: 500;
         box-shadow: 0 0 10px #00ffff88;
+        transition: background-color 0.2s, box-shadow 0.2s;
+      }
+      #muteBtn:disabled {
+          background-color: #555;
+          color: #aaa;
+          cursor: not-allowed;
+          box-shadow: none;
       }
 
       #toggleCameraBtn {
@@ -191,6 +201,13 @@
         cursor: pointer;
         font-weight: 500;
         box-shadow: 0 0 10px #ffac2888;
+        transition: background-color 0.2s, box-shadow 0.2s;
+      }
+      #toggleCameraBtn:disabled {
+          background-color: #555;
+          color: #aaa;
+          cursor: not-allowed;
+          box-shadow: none;
       }
 
       #nextBtn {
@@ -203,6 +220,13 @@
         cursor: pointer;
         font-weight: 500;
         box-shadow: 0 0 10px #ff444488;
+        transition: background-color 0.2s, box-shadow 0.2s;
+      }
+       #nextBtn:disabled {
+          background-color: #555;
+          color: #aaa;
+          cursor: not-allowed;
+          box-shadow: none;
       }
 
       #controls {
@@ -214,11 +238,12 @@
       #statusText {
         font-size: 1.5em;
         font-weight: 500;
-        color: #00ffff;
+        color: #00ffff; /* Default color */
         text-shadow:
           0 0 2px #00ffff88,
           0 0 6px #00ffff55,
           0 0 12px #00ffff33;
+        transition: color 0.3s ease;
       }
 
       #statusText.glitch {
@@ -255,7 +280,7 @@
           0 0 30px #00ffffcc;
         pointer-events: none;
         user-select: none;
-        display: none;
+        display: none; /* Hidden by default */
       }
 
       .loading-circle {
@@ -270,6 +295,7 @@
         animation: spin 1s linear infinite;
         transform: translate(-50%, -50%);
         z-index: 2;
+        display: none; /* Hidden by default */
       }
 
       @keyframes spin {
@@ -313,6 +339,11 @@
 
       .heart-btn:hover {
         transform: scale(1.2);
+      }
+      .heart-btn:disabled {
+          background-color: #555;
+          cursor: not-allowed;
+          transform: scale(1);
       }
 
       /* Animated hearts - Instagram style */
@@ -619,7 +650,7 @@
     </style>
   </head>
   <body>
-    <!-- Background Video -->
+    <!-- Background Video (Kept original CDN link) -->
     <video autoplay muted loop id="bgVideo" style="
         position: fixed;
         right: 0;
@@ -632,10 +663,11 @@
         src="https://cdn.glitch.global/498eeaf2-e9b7-4a5d-bb55-137a5bc68843/8688681-hd_1920_1080_25fps.mp4?v=1746920711781"
         type="video/mp4"
       />
+      Your browser does not support the video tag.
     </video>
 
-    <!-- User Info Modal -->
-    <div id="userInfoModal" class="active">
+    <!-- User Info Modal (Structure kept as is) -->
+    <div id="userInfoModal" class="active"> <!-- Starts active -->
       <div class="modal-content">
         <span class="emoji-decoration emoji-1">👾</span>
         <span class="emoji-decoration emoji-2">🎮</span>
@@ -648,7 +680,7 @@
         <div class="form-group">
           <label for="nickname">Nickname</label>
           <div class="nickname-container">
-            <input type="text" id="nickname" placeholder="Your nickname" autocomplete="off">
+            <input type="text" id="nickname" placeholder="Your nickname" autocomplete="off" maxlength="50">
             <button id="generateNickname" title="Generate random nickname">🎲</button>
           </div>
         </div>
@@ -671,8 +703,9 @@
       </div>
     </div>
 
+    <!-- Video Chat Container (Structure kept as is, initially hidden via CSS) -->
     <div id="videoContainer">
-      <h2 id="statusText">⌛ Waiting for a stranger...</h2>
+      <h2 id="statusText">⌛ Initializing...</h2>
 
       <div id="videos">
         <div id="localVideoContainer" class="videoBox glow">
@@ -684,7 +717,7 @@
           <video id="remoteVideo" autoplay playsinline></video>
           <div class="camera-off-emoji">👾</div>
           <div id="remoteNickname" class="nickname-display"></div>
-          <button id="heartBtn" class="heart-btn">❤️</button>
+          <button id="heartBtn" class="heart-btn" disabled>❤️</button> <!-- Start disabled -->
           <div class="loading-circle" id="loadingCircle"></div>
           
           <!-- Gen Z Swipe Indicators for Remote Video Only -->
@@ -699,22 +732,27 @@
       </div>
 
       <div id="controls">
-        <button id="toggleCameraBtn">Hide Camera</button>
-        <button id="muteBtn">Mute</button>
-        <button id="nextBtn">Next</button>
+        <!-- Buttons start disabled until connection is ready -->
+        <button id="toggleCameraBtn" disabled>Hide Camera</button>
+        <button id="muteBtn" disabled>Mute Mic</button>
+        <button id="nextBtn" disabled>Next</button>
       </div>
     </div>
 
-    <!-- Audio -->
+    <!-- Audio (Kept original CDN links, consider hosting locally) -->
     <audio
       id="disconnectSound"
       src="https://cdn.pixabay.com/audio/2022/03/21/audio_608e7cbbdb.mp3"
+      preload="auto"
     ></audio>
     
-    <!-- Load Socket.IO from the video server -->
-    <script src="https://barshatalk-video.glitch.me/socket.io/socket.io.js"></script>
+    <!-- Load Socket.IO from a reliable CDN (Point 8) -->
+    <!-- Removed old Glitch link -->
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 
-    <!-- Your local video.js file -->
+    <!-- Load your updated local video.js file -->
     <script src="/video.js"></script>
+
   </body>
 </html>
+
