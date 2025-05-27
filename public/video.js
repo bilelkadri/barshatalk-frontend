@@ -1,9 +1,8 @@
-// video.js - Updated Full Code
+// video.js - Corrected Code
 
 // --- Configuration --- 
-// Use a variable for the server URL (Point 7)
-// Ideally, this value would come from configuration or an injected environment variable
-const VIDEO_SERVER_URL = process.env.REACT_APP_VIDEO_SERVER_URL || "https://barshatalk-video-server-1.onrender.com"; 
+// Use the direct URL for the video chat server
+const VIDEO_SERVER_URL = "https://barshatalk-video-server.onrender.com"; 
 
 // --- DOM Elements --- 
 const muteBtn = document.getElementById("muteBtn");
@@ -17,7 +16,7 @@ const localCameraOffEmoji = localVideoContainer?.querySelector(".camera-off-emoj
 const remoteCameraOffEmoji = remoteVideoContainer?.querySelector(".camera-off-emoji"); // Use optional chaining
 const loadingCircle = document.getElementById("loadingCircle");
 const statusText = document.getElementById("statusText");
-const disconnectSound = document.getElementById("disconnectSound");
+// const disconnectSound = document.getElementById("disconnectSound"); // Sound commented out
 const userInfoModal = document.getElementById("userInfoModal");
 const videoContainer = document.getElementById("videoContainer");
 const startChatBtn = document.getElementById("startChatBtn");
@@ -53,7 +52,7 @@ let isMicEnabled = true;
 
 // Check if we are on the video page by checking for a key element
 if (userInfoModal) {
-  console.log("Video chat script loaded (v4 - Updated with Error Handling, TURN Fetch, Config).");
+  console.log("Video chat script loaded (v5 - Corrected Server URL).");
   initializeUserProfileModal();
 } else {
   console.log("Not on video page, video script inactive.");
@@ -267,6 +266,7 @@ function enableVideoControls() {
 async function fetchIceServersAndConnect() {
   setStatus("🔧 Configuring connection...");
   try {
+    // Use the direct URL here
     const response = await fetch(`${VIDEO_SERVER_URL}/api/turn-credentials`);
     if (response.ok) {
       const config = await response.json();
@@ -314,6 +314,7 @@ function initializeSocketAndWebRTC() {
 
   // Initialize Socket.IO connection (Point 7)
   try {
+      // Use the direct URL here
       socket = io(VIDEO_SERVER_URL, { 
           withCredentials: true, 
           transports: ["websocket", "polling"], // Explicitly define transports for robustness
@@ -419,181 +420,142 @@ function initializeSocketAndWebRTC() {
     if (data.partnerNickname && remoteNicknameDisplay) {
       remoteNicknameDisplay.textContent = data.partnerNickname;
       remoteNicknameDisplay.style.display = "block";
-      console.log("Partner nickname set:", data.partnerNickname);
     } else {
-      console.log("No partner nickname in matched event, requesting...");
-      if (socket && partnerId) {
-        socket.emit("getPartnerInfo", { partnerId: partnerId });
-      }
+      // Fallback if nickname not received
+      remoteNicknameDisplay.textContent = "Stranger";
+      remoteNicknameDisplay.style.display = "block";
     }
 
-    // Create Peer Connection and start signaling (wrapped in try...catch)
-    try {
-      createPeerConnection(); // Uses the fetched iceServersConfig
+    // Create Peer Connection
+    createPeerConnection();
 
-      if (isInitiator) {
-        console.log("I am the initiator, creating offer...");
-        const offer = await peerConnection.createOffer({ 
-            offerToReceiveAudio: true, 
-            offerToReceiveVideo: true 
-        });
+    // If initiator, create offer
+    if (isInitiator) {
+      try {
+        const offer = await peerConnection.createOffer();
         await peerConnection.setLocalDescription(offer);
-        // Send offer after a short delay to ensure partner is ready
-        setTimeout(() => {
-            if (socket && isConnected && partnerId) { // Check state before sending
-                 socket.emit("offer", { offer: peerConnection.localDescription, to: partnerId });
-                 console.log("Offer sent to", partnerId);
-            }
-        }, 500);
+        console.log("Created offer and set local description");
+        socket.emit("offer", { offer: offer, to: partnerId });
+        console.log("Sent offer to partner:", partnerId);
+      } catch (error) {
+        console.error("Error creating offer:", error);
+        setStatus("⚠️ Error starting connection (offer).");
+        cleanupConnection();
       }
-    } catch (err) {
-      console.error("Error during WebRTC setup (initiator offer):", err);
-      setStatus("⚠️ Error setting up video connection.");
-      disconnectPartner(false); // Disconnect without notifying server again immediately
     }
+    // Process any queued ICE candidates
+    processIceCandidateQueue();
+  });
+
+  // Event: Waiting for partner
+  socket.on("waiting", () => {
+    console.log("Server put client in waiting state.");
+    setStatus("⏳ Waiting for a stranger...");
+    isWaitingForMatch = true;
+    isConnected = false;
+    partnerId = null;
+    showLoadingCircle(true);
+    if(remoteVideoContainer) remoteVideoContainer.classList.remove("glow");
+    if (remoteNicknameDisplay) remoteNicknameDisplay.style.display = "none";
+    // Clean up previous connection if any
+    cleanupConnection(false); // Don't reset status text
   });
 
   // Event: Received offer from partner
   socket.on("offer", async (data) => {
-    if (isInitiator || !data || !data.offer || !data.from) {
-        console.warn("Ignoring unexpected offer.", { isInitiator, data });
+    if (!data || !data.offer || !data.from || data.from !== partnerId || isInitiator) {
+        console.warn("Ignoring invalid or unexpected offer:", data);
         return;
     }
-    console.log("Offer received from:", data.from);
-    
-    // Ensure connection state is consistent
-    if (!isConnected || partnerId !== data.from) {
-        console.log("Received offer but not connected to sender, setting up...");
-        partnerId = data.from;
-        isConnected = true;
-        isWaitingForMatch = false;
-        isInitiator = false; // We received the offer
-        setStatus("✅ Partner found! Connecting...");
-        if(remoteVideoContainer) remoteVideoContainer.classList.add("glow");
-        showLoadingCircle(false);
-        // Request partner info if needed
-        if (socket && partnerId && !remoteNicknameDisplay?.textContent) {
-            socket.emit("getPartnerInfo", { partnerId: partnerId });
-        }
+    console.log("Received offer from partner:", partnerId);
+    if (!peerConnection) {
+        createPeerConnection();
     }
-
     try {
-      // Create peer connection if it doesn't exist (should exist if matched event was processed)
-      if (!peerConnection) {
-          console.log("Peer connection doesn't exist, creating...");
-          createPeerConnection();
-      }
-      
       await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
-      console.log("Remote description (offer) set.");
-      
-      // Process queued candidates immediately
-      await processIceQueue();
-      
-      console.log("Creating answer...");
+      console.log("Set remote description (offer)");
       const answer = await peerConnection.createAnswer();
       await peerConnection.setLocalDescription(answer);
-      console.log("Local description (answer) set.");
-      
-      // Send answer after a short delay
-      setTimeout(() => {
-          if (socket && isConnected && partnerId) { // Check state
-              socket.emit("answer", { answer: peerConnection.localDescription, to: partnerId });
-              console.log("Answer sent to", partnerId);
-          }
-      }, 500);
-
-    } catch (err) {
-      console.error("Error handling offer / creating answer:", err);
-      setStatus("⚠️ Error processing video offer.");
-      disconnectPartner(false);
+      console.log("Created answer and set local description");
+      socket.emit("answer", { answer: answer, to: partnerId });
+      console.log("Sent answer to partner:", partnerId);
+      processIceCandidateQueue(); // Process any queued candidates after setting descriptions
+    } catch (error) {
+      console.error("Error handling offer:", error);
+      setStatus("⚠️ Error handling connection (offer).");
+      cleanupConnection();
     }
   });
 
   // Event: Received answer from partner
   socket.on("answer", async (data) => {
-    if (!isInitiator || !isConnected || !peerConnection || !data || !data.answer || !data.from || data.from !== partnerId) {
-        console.warn("Ignoring unexpected answer.", { isInitiator, isConnected, partnerId, from: data?.from });
+    if (!data || !data.answer || !data.from || data.from !== partnerId || !isInitiator) {
+        console.warn("Ignoring invalid or unexpected answer:", data);
         return;
     }
-    console.log("Answer received from:", data.from);
-    
+    console.log("Received answer from partner:", partnerId);
+    if (!peerConnection) {
+      console.error("Received answer but no peer connection exists!");
+      return;
+    }
     try {
       await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
-      console.log("Remote description (answer) set.");
-      // Process any queued candidates after setting answer
-      await processIceQueue();
-    } catch (err) {
-      console.error("Error setting remote description (answer):", err);
-      setStatus("⚠️ Error processing video answer.");
-      disconnectPartner(false);
+      console.log("Set remote description (answer)");
+      processIceCandidateQueue(); // Process any queued candidates after setting descriptions
+    } catch (error) {
+      console.error("Error handling answer:", error);
+      setStatus("⚠️ Error handling connection (answer).");
+      cleanupConnection();
     }
   });
 
   // Event: Received ICE candidate from partner
   socket.on("candidate", async (data) => {
-    if (!isConnected || !peerConnection || !data || !data.candidate || !data.from || data.from !== partnerId) {
-        console.warn("Ignoring unexpected ICE candidate.", { isConnected, partnerId, from: data?.from });
+    if (!data || !data.candidate || !data.from || data.from !== partnerId) {
+        console.warn("Ignoring invalid or unexpected candidate:", data);
         return;
     }
-    // console.log("ICE Candidate received from:", data.from);
-    
+    console.log("Received ICE candidate from partner:", partnerId);
     try {
-      // Queue candidate if remote description is not yet set
-      if (!peerConnection.remoteDescription || !peerConnection.remoteDescription.type) {
-        console.log("🕒 Queuing ICE candidate (remote description not set)");
-        iceCandidateQueue.push(data.candidate);
+      const candidate = new RTCIceCandidate(data.candidate);
+      if (peerConnection && peerConnection.remoteDescription) {
+        await peerConnection.addIceCandidate(candidate);
+        console.log("Added received ICE candidate");
       } else {
-        await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
-        // console.log("ICE candidate added.");
+        // Queue candidate if peer connection or remote description isn't ready yet
+        iceCandidateQueue.push(candidate);
+        console.log("Queued received ICE candidate");
       }
-    } catch (err) {
-      // Log warnings for ICE candidate errors, as they are sometimes non-fatal
-      console.warn("❗ Error adding received ICE candidate (often ignorable):", err.message);
-    }
-  });
-
-  // Event: Received reaction from partner
-  socket.on("reaction", (data) => {
-    if (isConnected && data && data.emoji === "❤️" && data.from === partnerId) {
-      console.log(`Received heart reaction from ${data.nickname || partnerId}`);
-      showHeartAnimation(); // Trigger local animation display
-    }
-  });
-
-  // Event: Received partner info (nickname, etc.)
-  socket.on("partnerInfo", (data) => {
-    if (isConnected && data && data.nickname && remoteNicknameDisplay) {
-      console.log("Partner info received:", data);
-      remoteNicknameDisplay.textContent = data.nickname;
-      remoteNicknameDisplay.style.display = "block";
+    } catch (error) {
+      // Ignore benign errors like candidate already added or state preventing addition
+      if (!error.message.includes("Cannot add ICE candidate") && !error.message.includes("Error processing ICE candidate")) {
+           console.error("Error adding received ICE candidate:", error);
+      }
     }
   });
 
   // Event: Partner disconnected
   socket.on("partnerDisconnected", () => {
-      console.log("Partner disconnected event received from server.");
-      disconnectPartner(true); // Disconnect and go back to waiting state
+    console.log("Partner disconnected event received.");
+    setStatus("❌ Partner disconnected. Waiting...");
+    if(remoteVideoContainer) remoteVideoContainer.classList.remove("glow");
+    if (remoteNicknameDisplay) remoteNicknameDisplay.style.display = "none";
+    // Commented out sound
+    // if (disconnectSound) {
+    //     disconnectSound.play().catch(e => console.error("Error playing disconnect sound:", e));
+    // }
+    cleanupConnection();
+    // Server should automatically put this client in waiting state
+    isWaitingForMatch = true;
+    showLoadingCircle(true);
   });
 
-  // Event: Server puts us back in waiting state
-  socket.on("waiting", () => {
-    console.log("Server put us in waiting state.");
-    if (isConnected) {
-        // This might happen if the server forces a disconnect/requeue
-        cleanupConnection();
-    }
-    isConnected = false;
-    isWaitingForMatch = true;
-    isInitiator = false;
-    partnerId = null;
-    setStatus("⌛ Waiting for a stranger...");
-    if(remoteVideoContainer) remoteVideoContainer.classList.remove("glow");
-    if(remoteVideo) remoteVideo.style.display = "none";
-    updateCameraOffEmoji(remoteCameraOffEmoji, true);
-    showLoadingCircle(true);
-    if (remoteNicknameDisplay) remoteNicknameDisplay.style.display = "none";
-    iceCandidateQueue = []; // Clear queue
+  // Event: Received reaction from partner
+  socket.on("reaction", (reactionData) => {
+      if (reactionData && reactionData.type === "heart") {
+          showFloatingEmoji("❤️", true); // Show on remote side
+      }
+      // Add more reaction types if needed
   });
 
 }
@@ -601,235 +563,170 @@ function initializeSocketAndWebRTC() {
 // --- WebRTC Peer Connection Logic --- 
 
 function createPeerConnection() {
-  console.log("Creating Peer Connection with config:", iceServersConfig);
-  // Close existing connection if any
   if (peerConnection) {
-    console.log("Closing existing Peer Connection before creating new one.");
+    console.log("Closing existing peer connection before creating new one.");
     peerConnection.close();
     peerConnection = null;
   }
-  
-  // Ensure remote stream is reset
-  if (remoteStream) {
-      remoteStream.getTracks().forEach(t => t.stop());
-  }
-  remoteStream = new MediaStream();
-  if(remoteVideo) remoteVideo.srcObject = remoteStream;
-
+  console.log("Creating new PeerConnection with config:", iceServersConfig);
   try {
-    // Create the connection using the fetched ICE server config (Point 1)
     peerConnection = new RTCPeerConnection({ iceServers: iceServersConfig });
 
-    // Event: ICE Candidate generated locally
-    peerConnection.onicecandidate = event => {
-      if (event.candidate) {
-        // console.log("Local ICE Candidate generated:", event.candidate);
-        // Send candidate to the partner via the signaling server
-        if (socket && isConnected && partnerId) {
-          socket.emit("candidate", { candidate: event.candidate, to: partnerId });
-        }
+    // Event: ICE candidate generated
+    peerConnection.onicecandidate = (event) => {
+      if (event.candidate && socket && partnerId) {
+        console.log("Generated ICE candidate, sending to partner:", partnerId);
+        socket.emit("candidate", { candidate: event.candidate, to: partnerId });
+      } else if (!event.candidate) {
+          console.log("ICE gathering finished.");
       }
     };
 
-    // Event: Remote track received
-    peerConnection.ontrack = event => {
-      console.log("Remote track received:", event.track.kind, event.streams[0]);
-      if (event.streams && event.streams[0]) {
-        event.streams[0].getTracks().forEach(track => {
-          console.log(`➡️ Adding track to remoteStream: ${track.kind}`);
-          if (remoteStream) remoteStream.addTrack(track);
-        });
-        // Once tracks are received, show the remote video
-        if(remoteVideo) remoteVideo.style.display = "block";
-        updateCameraOffEmoji(remoteCameraOffEmoji, false);
-        showLoadingCircle(false); // Hide loading circle
-      } else {
-          // Handle cases where track is added directly (less common now)
-          console.log(`➡️ Adding track directly to remoteStream: ${event.track.kind}`);
-           if (remoteStream) remoteStream.addTrack(event.track);
-           if(remoteVideo) remoteVideo.style.display = "block";
-           updateCameraOffEmoji(remoteCameraOffEmoji, false);
-           showLoadingCircle(false);
-      }
-    };
-
-    // Event: ICE Connection State Change
+    // Event: ICE connection state change
     peerConnection.oniceconnectionstatechange = () => {
       if (!peerConnection) return;
-      console.log("ICE Connection State Change:", peerConnection.iceConnectionState);
+      console.log("ICE connection state change:", peerConnection.iceConnectionState);
       switch (peerConnection.iceConnectionState) {
-          case "connected":
-              setStatus("✅ Connected");
-              showLoadingCircle(false);
-              break;
-          case "disconnected":
-              setStatus("⚠️ Connection unstable. Trying to reconnect...");
-              // WebRTC might recover automatically
-              break;
-          case "failed":
-              setStatus("❌ Connection failed.");
-              disconnectPartner(true); // Disconnect fully on failure
-              break;
-          case "closed":
-              setStatus("Connection closed.");
-              // Already handled by disconnectPartner or cleanupConnection
-              break;
+        case "connected":
+          setStatus("🟢 Connected!");
+          isConnected = true;
+          isWaitingForMatch = false;
+          showLoadingCircle(false);
+          break;
+        case "disconnected":
+          setStatus("⚠️ Connection lost? Trying to reconnect...");
+          // Rely on socket disconnect or higher-level logic to handle this fully
+          break;
+        case "failed":
+          setStatus("❌ Connection failed.");
+          console.error("ICE connection failed.");
+          cleanupConnection();
+          // Ask server for a new partner after a short delay?
+          // setTimeout(() => { if (socket) socket.emit("next"); }, 1000);
+          break;
+        case "closed":
+          console.log("ICE connection closed.");
+          // Cleanup is usually handled elsewhere
+          break;
       }
     };
 
-    // Event: Signaling State Change (for debugging)
-    peerConnection.onsignalingstatechange = () => {
-        if (!peerConnection) return;
-        console.log("Signaling State Change:", peerConnection.signalingState);
-    };
-    
-    // Event: Connection State Change (more comprehensive)
-    peerConnection.onconnectionstatechange = () => {
-        if (!peerConnection) return;
-        console.log("Connection State Change:", peerConnection.connectionState);
-         switch (peerConnection.connectionState) {
-            case "connected":
-                setStatus("✅ Connected");
-                showLoadingCircle(false);
-                break;
-            case "disconnected":
-                setStatus("⚠️ Connection lost. Reconnecting...");
-                break;
-            case "failed":
-                setStatus("❌ Connection failed.");
-                disconnectPartner(true);
-                break;
-            case "closed":
-                setStatus("Connection closed.");
-                break;
+    // Event: Track received from remote peer
+    peerConnection.ontrack = (event) => {
+      console.log("Track received from remote peer:", event.track, event.streams);
+      if (event.streams && event.streams[0]) {
+        // Add track to the remote stream
+        remoteStream.addTrack(event.track);
+        if (remoteVideo) {
+            remoteVideo.srcObject = remoteStream; // Re-assign in case it was null
+            remoteVideo.style.display = "block"; // Show remote video element
+            updateCameraOffEmoji(remoteCameraOffEmoji, false); // Hide emoji
+        } else {
+            console.error("Remote video element missing when track received!");
         }
+      } else {
+          // Handle cases where track might not have a stream (less common)
+          console.warn("Received track without an associated stream:", event.track);
+          // You might need to manually create a stream and add the track
+          // remoteStream.addTrack(event.track);
+          // if (remoteVideo) remoteVideo.srcObject = remoteStream;
+      }
+      
+      // Handle remote camera on/off based on track state?
+      event.track.onmute = () => {
+          console.log("Remote track muted:", event.track.kind);
+          if (event.track.kind === "video") {
+              updateCameraOffEmoji(remoteCameraOffEmoji, true);
+              if (remoteVideo) remoteVideo.style.display = "none";
+          }
+      };
+      event.track.onunmute = () => {
+          console.log("Remote track unmuted:", event.track.kind);
+          if (event.track.kind === "video") {
+              updateCameraOffEmoji(remoteCameraOffEmoji, false);
+               if (remoteVideo) remoteVideo.style.display = "block";
+          }
+      };
     };
 
-    // Add local tracks to the connection (wrapped in try...catch - Point 4)
+    // Add local tracks to the connection
     if (localStream) {
       localStream.getTracks().forEach(track => {
         try {
-          if (peerConnection && !peerConnection.getSenders().some(s => s.track === track)) {
             peerConnection.addTrack(track, localStream);
-            console.log(`✔️ Track added to peerConnection: ${track.kind}`);
-          }
-        } catch (err) {
-          console.error(`Error adding track (${track.kind}):`, err);
-          setStatus("⚠️ Error adding local video/audio.");
-          // Consider disconnecting if adding tracks fails critically
+            console.log(`Added local ${track.kind} track to peer connection.`);
+        } catch (error) {
+            console.error(`Error adding local ${track.kind} track:`, error);
         }
       });
     } else {
-        console.error("Cannot add tracks: Local stream is missing.");
-        setStatus("⚠️ Internal Error: Camera stream lost.");
+        console.error("Cannot add tracks: Local stream is not available.");
     }
 
   } catch (error) {
-      console.error("Failed to create Peer Connection:", error);
-      setStatus("⚠️ Critical Error: Cannot create video connection.");
-      cleanupConnection();
+    console.error("Error creating PeerConnection:", error);
+    setStatus("❌ Error creating connection.");
+    cleanupConnection();
   }
 }
 
-async function processIceQueue() {
-    if (!peerConnection || !peerConnection.remoteDescription || !peerConnection.remoteDescription.type) {
-        console.log("Cannot process ICE queue: Peer connection or remote description not ready.");
+function processIceCandidateQueue() {
+    if (!peerConnection || !peerConnection.remoteDescription) {
+        // console.log("Cannot process ICE queue yet, peer connection or remote description not ready.");
         return;
     }
-    if (iceCandidateQueue.length > 0) {
-        console.log(`Processing ${iceCandidateQueue.length} queued ICE candidates...`);
-        while (iceCandidateQueue.length > 0) {
-            const candidate = iceCandidateQueue.shift();
-            try {
-                await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
-                // console.log("Queued ICE candidate added.");
-            } catch (err) {
-                console.warn("❗ Adding queued ICE candidate failed (often ignorable):", err.message);
+    while (iceCandidateQueue.length > 0) {
+        const candidate = iceCandidateQueue.shift();
+        console.log("Processing queued ICE candidate");
+        peerConnection.addIceCandidate(candidate).catch(error => {
+            // Ignore benign errors
+            if (!error.message.includes("Cannot add ICE candidate") && !error.message.includes("Error processing ICE candidate")) {
+                 console.error("Error adding queued ICE candidate:", error);
             }
-        }
+        });
     }
 }
 
-// --- Cleanup and Disconnect Logic --- 
+function cleanupConnection(resetStatus = true) {
+  console.log("Cleaning up connection...");
+  if (peerConnection) {
+    peerConnection.close();
+    peerConnection = null;
+  }
+  if (remoteVideo && remoteVideo.srcObject) {
+    // Stop remote tracks
+    remoteVideo.srcObject.getTracks().forEach(track => track.stop());
+    remoteVideo.srcObject = null; 
+    remoteVideo.style.display = "none";
+  }
+  updateCameraOffEmoji(remoteCameraOffEmoji, true);
+  if(remoteVideoContainer) remoteVideoContainer.classList.remove("glow");
+  if (remoteNicknameDisplay) remoteNicknameDisplay.style.display = "none";
 
-// Main function to handle partner disconnection, resets state
-function disconnectPartner(notifyServer) {
-  console.log(`Disconnecting partner. Notify server: ${notifyServer}`);
-  if (isConnected || peerConnection) { // Only cleanup if actually connected or trying
-    if (disconnectSound) {
-        disconnectSound.play().catch(e => console.error("Error playing disconnect sound:", e));
-    }
-    
-    cleanupConnection(); // Close WebRTC and streams
-
-    isConnected = false;
-    isWaitingForMatch = true; // Go back to waiting state
-    isInitiator = false;
-    const oldPartnerId = partnerId;
-    partnerId = null;
-    
-    setStatus("❌ Partner disconnected. Waiting...");
-    if(remoteVideoContainer) remoteVideoContainer.classList.remove("glow");
-    if(remoteVideo) remoteVideo.style.display = "none";
-    updateCameraOffEmoji(remoteCameraOffEmoji, true);
-    showLoadingCircle(true);
-    if (remoteNicknameDisplay) remoteNicknameDisplay.style.display = "none";
-    iceCandidateQueue = []; // Clear queue
-
-    // Tell the server we are ready for a new match ONLY if requested
-    if (notifyServer && socket && socket.connected) {
-        console.log("Notifying server we are ready for next match.");
-        // Server expects a "ready" event to re-enter the queue
-        if (userProfile.nickname && userProfile.gender) {
-             socket.emit("ready", { 
-                nickname: userProfile.nickname,
-                gender: userProfile.gender
-            });
-        } else {
-             console.error("Cannot signal ready: User profile incomplete.");
-             setStatus("⚠️ Error: Profile incomplete.");
-        }
-    } else if (notifyServer && (!socket || !socket.connected)) {
-        console.warn("Cannot notify server for next match: Socket not connected.");
-        setStatus("⚠️ Not connected to server. Please refresh?");
-    }
+  iceCandidateQueue = []; // Clear any pending candidates
+  partnerId = null;
+  isConnected = false;
+  isInitiator = false;
+  // Don't reset isWaitingForMatch here, let server events control it
+  if (resetStatus) {
+      setStatus("⌛ Waiting for a stranger...");
+      showLoadingCircle(true);
   }
 }
-
-// Cleans up WebRTC and stream resources
-function cleanupConnection() {
-    console.log("Cleaning up WebRTC connection and streams...");
-    if (peerConnection) {
-        peerConnection.onicecandidate = null;
-        peerConnection.ontrack = null;
-        peerConnection.oniceconnectionstatechange = null;
-        peerConnection.onsignalingstatechange = null;
-        peerConnection.onconnectionstatechange = null;
-        peerConnection.close();
-        peerConnection = null;
-    }
-    if (remoteStream) {
-        remoteStream.getTracks().forEach(track => track.stop());
-        remoteStream = null;
-        if(remoteVideo) remoteVideo.srcObject = null;
-    }
-    // Do NOT stop localStream here, user might want to stay on the page
-    iceCandidateQueue = []; // Clear any pending candidates
-}
-
-// --- UI Helpers --- 
 
 function setStatus(text) {
   if (statusText) {
     statusText.textContent = text;
-    // Reset color unless it indicates an error
-    if (text.startsWith("⚠️") || text.startsWith("❌")) {
-        statusText.style.color = "#ff4444";
-    } else if (text.startsWith("✅")) {
-         statusText.style.color = "#00ff00";
+    // Reset color unless it's an error/warning
+    if (text.includes("❌") || text.includes("⚠️")) {
+        statusText.style.color = "#ff4444"; // Red for errors
+    } else if (text.includes("✅") || text.includes("🟢")) {
+        statusText.style.color = "#00ff00"; // Green for success
     } else {
         statusText.style.color = "#00ffff"; // Default cyan
     }
+  } else {
+      console.log("Status:", text); // Fallback if element not found
   }
 }
 
@@ -839,116 +736,107 @@ function showLoadingCircle(show) {
     }
 }
 
+// --- UI Event Listeners --- 
+if (muteBtn) {
+    muteBtn.addEventListener("click", toggleMic);
+} else {
+    console.error("Mute button (muteBtn) not found!");
+}
+
+if (toggleCameraBtn) {
+    toggleCameraBtn.addEventListener("click", toggleCamera);
+} else {
+    console.error("Toggle Camera button (toggleCameraBtn) not found!");
+}
+
+if (nextBtn) {
+    nextBtn.addEventListener("click", () => {
+      if (!socket || !socket.connected) {
+          setStatus("⚠️ Cannot request next: Not connected.");
+          return;
+      }
+      console.log("Next button clicked");
+      setStatus("🏃 Finding next partner...");
+      if(remoteVideoContainer) remoteVideoContainer.classList.remove("glow");
+      if (remoteNicknameDisplay) remoteNicknameDisplay.style.display = "none";
+      // Commented out sound
+      // if (disconnectSound) {
+      //     disconnectSound.play().catch(e => console.error("Error playing disconnect sound:", e));
+      // }
+      cleanupConnection(false); // Clean up old connection, keep status text
+      socket.emit("next");
+      isWaitingForMatch = true;
+      showLoadingCircle(true);
+    });
+} else {
+    console.error("Next button (nextBtn) not found!");
+}
+
 // --- Mobile Gestures --- 
 function initMobileGestures() {
-  let touchStartY = 0;
+    let touchstartX = 0;
+    let touchendX = 0;
+    const gestureZone = document.body; // Or a specific container
 
-  // Add touch listener to remote video container for swipe up = next
-  if (remoteVideoContainer) {
-      remoteVideoContainer.addEventListener("touchstart", (e) => {
-          if (e.touches.length === 1) { // Single touch
-              touchStartY = e.touches[0].clientY;
-          }
-      }, { passive: true });
+    gestureZone.addEventListener('touchstart', function(event) {
+        touchstartX = event.changedTouches[0].screenX;
+    }, false);
 
-      remoteVideoContainer.addEventListener("touchend", (e) => {
-          if (e.changedTouches.length === 1) { // Single touch
-              const touchEndY = e.changedTouches[0].clientY;
-              const swipeDistance = touchStartY - touchEndY;
-              
-              // Check for a significant upward swipe
-              if (swipeDistance > 50) { // Threshold of 50px
-                  console.log("Swipe up detected on remote video - triggering next.");
-                  // Add visual feedback (optional)
-                  if(remoteVideoContainer) {
-                      remoteVideoContainer.classList.add("swipe-up-transition");
-                      setTimeout(() => remoteVideoContainer.classList.remove("swipe-up-transition"), 500);
-                  }
-                  // Trigger the next button click
-                  if (nextBtn && !nextBtn.disabled) {
-                      nextBtn.click();
-                  }
-              }
-          }
-      });
-  }
+    gestureZone.addEventListener('touchend', function(event) {
+        touchendX = event.changedTouches[0].screenX;
+        handleGesture();
+    }, false); 
+
+    function handleGesture() {
+        if (touchendX < touchstartX - 50) { // Swipe Left
+            console.log('Swiped left');
+            if (nextBtn && !nextBtn.disabled) {
+                nextBtn.click(); // Simulate next button click
+            }
+        }
+        // Add swipe right if needed
+        // if (touchendX > touchstartX + 50) { 
+        //     console.log('Swiped right');
+        // }
+    }
 }
 
-// --- Heart Reaction Logic --- 
+// --- Heart Button --- 
 function initHeartButton() {
-  if (heartBtn) {
+    if (!heartBtn) return;
     heartBtn.addEventListener("click", () => {
-        if (isConnected && socket && partnerId) {
-            console.log("Sending heart reaction.");
-            // Send reaction to partner via server
-            socket.emit("reaction", { 
-                emoji: "❤️", 
-                to: partnerId,
-                // nickname: userProfile.nickname // Server can add nickname based on socket ID
-            });
-            // Show animation locally immediately
-            showHeartAnimation();
-        } else {
-            console.log("Cannot send heart: Not connected.");
+        if (socket && isConnected && partnerId) {
+            socket.emit("reaction", { type: "heart", to: partnerId });
+            showFloatingEmoji("❤️", false); // Show locally immediately
         }
     });
+}
+
+function showFloatingEmoji(emoji, isRemote) {
+    const container = isRemote ? remoteVideoContainer : localVideoContainer;
+    if (!container) return;
+
+    const emojiElement = document.createElement("div");
+    emojiElement.textContent = emoji;
+    emojiElement.classList.add("floating-emoji");
+    container.appendChild(emojiElement);
+
+    // Remove the emoji after animation
+    emojiElement.addEventListener("animationend", () => {
+        emojiElement.remove();
+    });
+}
+
+// --- Graceful Shutdown --- 
+window.addEventListener("beforeunload", () => {
+  if (socket) {
+    socket.disconnect();
   }
-}
-
-function showHeartAnimation() {
-  if (!remoteVideoContainer) return;
-  const colors = ["heart-pink", "heart-red", "heart-purple", "heart-blue"];
-  const heartCount = 3 + Math.floor(Math.random() * 3); // 3-5 hearts
-
-  for (let i = 0; i < heartCount; i++) {
-    setTimeout(() => {
-      const heartElement = document.createElement("div");
-      heartElement.textContent = "❤️";
-      heartElement.classList.add("animated-heart");
-      const colorClass = colors[Math.floor(Math.random() * colors.length)];
-      heartElement.classList.add(colorClass);
-      const randomX = Math.random() * 80 + 10; // 10% to 90%
-      heartElement.style.left = `${randomX}%`;
-      heartElement.style.bottom = "20px";
-      const randomSize = 0.8 + Math.random() * 0.4;
-      heartElement.style.fontSize = `${50 * randomSize}px`;
-
-      remoteVideoContainer.appendChild(heartElement);
-
-      // Remove after animation
-      setTimeout(() => {
-        if (remoteVideoContainer.contains(heartElement)) {
-          remoteVideoContainer.removeChild(heartElement);
-        }
-      }, 2000);
-    }, i * 150); // Stagger hearts
+  if (peerConnection) {
+    peerConnection.close();
   }
-}
-
-// --- UI Event Listeners Setup --- 
-if (muteBtn) muteBtn.onclick = toggleMic;
-if (toggleCameraBtn) toggleCameraBtn.onclick = toggleCamera;
-if (nextBtn) {
-    nextBtn.onclick = () => {
-        console.log("Next button clicked.");
-        if (socket && socket.connected) {
-            // Disconnect current partner and tell server we want the next one
-            disconnectPartner(true); 
-        } else {
-            console.warn("Cannot request next: Socket not connected.");
-            setStatus("⚠️ Not connected to server.");
-        }
-    };
-}
-
-// --- Global Error Handling --- 
-window.addEventListener("error", (event) => {
-    console.error("Unhandled global error:", event.error, event.message);
-    // Optionally report critical errors to a logging service
+  if (localStream) {
+    localStream.getTracks().forEach(track => track.stop());
+  }
 });
-window.addEventListener("unhandledrejection", (event) => {
-    console.error("Unhandled promise rejection:", event.reason);
-});
-
-
 
