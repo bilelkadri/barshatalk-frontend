@@ -1,9 +1,7 @@
-// script.js - Updated Full Code
+// script.js - Corrected Code
 
-// Use a variable for the server URL (Point 7)
-// Ideally, this value would come from configuration or an injected environment variable
-// For now, using the direct URL but stored in a variable for easier future changes.
-const TEXT_SERVER_URL = process.env.REACT_APP_TEXT_SERVER_URL || "https://barshatalk-text-server.onrender.com"; 
+// Use the direct URL for the text chat server
+const TEXT_SERVER_URL = "https://barshatalk-text-server.onrender.com"; 
 
 // --- Socket.IO Connection ---
 let socket; 
@@ -42,11 +40,11 @@ const statusText = document.getElementById("statusText");
 const emojiBtn = document.getElementById("emojiBtn");
 const emojiPicker = document.getElementById("emojiPicker");
 
-// --- Sound Elements ---
-const messageSound = document.getElementById("sendSound"); 
-const disconnectSound = document.getElementById("disconnectSound"); 
+// --- Sound Elements (Commented out temporarily) ---
+// const messageSound = document.getElementById("sendSound"); 
+// const disconnectSound = document.getElementById("disconnectSound"); 
 
-console.log("Text chat script loaded (v4 - Updated with Error Handling & Config).");
+console.log("Text chat script loaded (v5 - Corrected Server URL).");
 
 // --- Socket Event Handlers ---
 
@@ -152,11 +150,12 @@ socket.on("partnerDisconnected", () => {
         statusText.textContent = "❌ Partner left. Waiting...";
         statusText.style.color = "#ff4444"; // Red for disconnected
     }
-    if (disconnectSound) {
-        disconnectSound.play().catch(e => console.error("Error playing disconnect sound:", e));
-    } else {
-        console.warn("Disconnect sound element not found");
-    }
+    // Commented out sound temporarily
+    // if (disconnectSound) {
+    //     disconnectSound.play().catch(e => console.error("Error playing disconnect sound:", e));
+    // } else {
+    //     console.warn("Disconnect sound element not found");
+    // }
     // Server should automatically put this user back into the waiting queue
     // UI should reflect waiting state
     if (sendBtn) sendBtn.disabled = true; 
@@ -179,11 +178,12 @@ function sendMessage() {
         appendMessage(trimmedMsg, "you"); // Display the trimmed message
         socket.emit("message", trimmedMsg); // Send the trimmed message
         messageInput.value = ""; // Clear input after sending
-        if (messageSound) {
-            messageSound.play().catch(e => console.error("Error playing send sound:", e));
-        } else {
-            console.warn("Send sound element not found");
-        }
+        // Commented out sound temporarily
+        // if (messageSound) {
+        //     messageSound.play().catch(e => console.error("Error playing send sound:", e));
+        // } else {
+        //     console.warn("Send sound element not found");
+        // }
     } else if (trimmedMsg.length > 500) {
         // Inform user message is too long
         appendMessage("⚠️ Your message is too long (max 500 characters).", "system");
@@ -224,11 +224,12 @@ if (nextBtn) {
       if (messages) messages.innerHTML = 
           `<div class="system-message">🏃 You requested the next partner...</div>
            <div class="system-message">⏳ Waiting for a new text chat partner...</div>`;
-      if (disconnectSound) {
-          disconnectSound.play().catch(e => console.error("Error playing disconnect sound:", e));
-      } else {
-          console.warn("Disconnect sound element not found");
-      }
+      // Commented out sound temporarily
+      // if (disconnectSound) {
+      //     disconnectSound.play().catch(e => console.error("Error playing disconnect sound:", e));
+      // } else {
+      //     console.warn("Disconnect sound element not found");
+      // }
       socket.emit("next"); 
       if (statusText) {
           statusText.textContent = "⏳ Finding next partner...";
@@ -303,3 +304,6 @@ if (messageInput) messageInput.disabled = true;
 // Reminder about Audio Errors (from original code)
 // Ensure audio files are accessible. Consider hosting locally.
 // Example: <audio id="sendSound" src="/sounds/send.mp3"></audio>
+
+
+
