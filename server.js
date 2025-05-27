@@ -1,4 +1,8 @@
 // server.js - Modifications
+console.log("--- Server Start ---"); // Add a clear marker
+console.log("Raw process.env.REDIS_URL:", process.env.REDIS_URL); // Add this line
+console.log("Raw process.env.FRONTEND_URL:", process.env.FRONTEND_URL); // Also log this
+
 const express = require("express");
 const app = express();
 const http = require("http").createServer(app);
